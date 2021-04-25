@@ -28,8 +28,8 @@
 
 class PolicyEngine {
 public:
-  // Sets up internal state and registers the thread
-  static void init();
+  static void thread();
+
   // Push an incoming message to the Policy Engine
   static void handleMessage(union pd_msg *msg);
   // Returns true if headers indicate PD3.0 compliant
@@ -87,7 +87,6 @@ private:
   /* The index of the first PPS APDO */
   static uint8_t _pps_index;
 
-  static void pe_task(const void *arg);
   enum policy_engine_state {
     PESinkStartup,
     PESinkDiscovery,

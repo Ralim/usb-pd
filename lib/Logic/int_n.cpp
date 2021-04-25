@@ -33,13 +33,6 @@ uint32_t InterruptHandler::TaskBuffer[InterruptHandler::TaskStackSize];
 osStaticThreadDef_t InterruptHandler::TaskControlBlock;
 union pd_msg InterruptHandler::tempMessage;
 
-void InterruptHandler::init() {
-  TaskHandle = NULL;
-  osThreadStaticDef(intTask, Thread, PDB_PRIO_PRL_INT_N, 0, TaskStackSize,
-                    TaskBuffer, &TaskControlBlock);
-  TaskHandle = osThreadCreate(osThread(intTask), NULL);
-}
-
 void InterruptHandler::readPendingMessage() {
   /* Get a buffer to read the message into.  Guaranteed to not fail
    * because we have a big enough pool and are careful. */
@@ -62,8 +55,7 @@ void InterruptHandler::readPendingMessage() {
   }
 }
 
-void InterruptHandler::Thread(const void *arg) {
-  (void)arg;
+void InterruptHandler::thread() {
   union fusb_status status;
   for (;;) {
     // If the irq is low continue, otherwise wait for irq or timeout

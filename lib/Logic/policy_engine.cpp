@@ -47,15 +47,6 @@ EventGroupHandle_t PolicyEngine::xEventGroupHandle = NULL;
 StaticEventGroup_t PolicyEngine::xCreatedEventGroup;
 bool PolicyEngine::PPSTimerEnabled = false;
 TickType_t PolicyEngine::PPSTimeLastEvent = 0;
-void PolicyEngine::init() {
-  messagesWaiting = xQueueCreateStatic(PDB_MSG_POOL_SIZE, sizeof(union pd_msg),
-                                       ucQueueStorageArea, &xStaticQueue);
-  // Create static thread at PDB_PRIO_PE priority
-  osThreadStaticDef(PolEng, pe_task, PDB_PRIO_PE, 0, TaskStackSize, TaskBuffer,
-                    &TaskControlBlock);
-  TaskHandle = osThreadCreate(osThread(PolEng), NULL);
-  xEventGroupHandle = xEventGroupCreateStatic(&xCreatedEventGroup);
-}
 
 void PolicyEngine::notify(PolicyEngine::Notifications notification) {
   EventBits_t val = (EventBits_t)notification;
@@ -64,8 +55,10 @@ void PolicyEngine::notify(PolicyEngine::Notifications notification) {
   }
 }
 
-void PolicyEngine::pe_task(const void *arg) {
-  (void)arg;
+void PolicyEngine::thread() {
+  messagesWaiting = xQueueCreateStatic(PDB_MSG_POOL_SIZE, sizeof(union pd_msg),
+                                       ucQueueStorageArea, &xStaticQueue);
+  xEventGroupHandle = xEventGroupCreateStatic(&xCreatedEventGroup);
   // Internal thread loop
   hdr_template = PD_DATAROLE_UFP | PD_POWERROLE_SINK;
   /* Initialize the old_tcc_match */

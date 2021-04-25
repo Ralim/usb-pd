@@ -24,16 +24,10 @@
 class InterruptHandler {
 public:
   // Creates the thread to handle the Interrupt pin
-  static void init();
-
+  static void thread();
   static void irqCallback();
 
 private:
-  static void Thread(const void *arg);
-  static volatile osThreadId TaskHandle;
-  static const size_t TaskStackSize = 1536 / 3;
-  static uint32_t TaskBuffer[TaskStackSize];
-  static osStaticThreadDef_t TaskControlBlock;
   /*
    * Hard Reset machine states
    */

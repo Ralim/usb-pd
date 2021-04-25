@@ -208,8 +208,11 @@ ProtocolTransmit::protocol_tx_discard_message() {
     return PRLTxWaitMessage;
   }
 }
-void ProtocolTransmit::thread(const void *args) {
-  (void)args;
+void ProtocolTransmit::thread() {
+  messagesWaiting = xQueueCreateStatic(PDB_MSG_POOL_SIZE, sizeof(union pd_msg),
+                                       ucQueueStorageArea, &xStaticQueue);
+  xEventGroupHandle = xEventGroupCreateStatic(&xCreatedEventGroup);
+
   ProtocolTransmit::protocol_tx_state state = PRLTxPHYReset;
 
   // Init the incoming message queue
@@ -254,16 +257,6 @@ void ProtocolTransmit::notify(ProtocolTransmit::Notifications notification) {
   if (xEventGroupHandle != NULL) {
     xEventGroupSetBits(xEventGroupHandle, (uint32_t)notification);
   }
-}
-
-void ProtocolTransmit::init() {
-  messagesWaiting = xQueueCreateStatic(PDB_MSG_POOL_SIZE, sizeof(union pd_msg),
-                                       ucQueueStorageArea, &xStaticQueue);
-
-  osThreadStaticDef(pd_txTask, thread, PDB_PRIO_PRL, 0, TaskStackSize,
-                    TaskBuffer, &TaskControlBlock);
-  TaskHandle = osThreadCreate(osThread(pd_txTask), NULL);
-  xEventGroupHandle = xEventGroupCreateStatic(&xCreatedEventGroup);
 }
 
 void ProtocolTransmit::pushMessage(union pd_msg *msg) {
