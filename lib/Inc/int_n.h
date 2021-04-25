@@ -19,7 +19,7 @@
 #ifndef PDB_INT_N_OLD_H
 #define PDB_INT_N_OLD_H
 
-#include <pd.h>
+#include "pd.h"
 
 class InterruptHandler {
 public:

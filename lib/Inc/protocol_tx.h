@@ -28,7 +28,9 @@
 
 class ProtocolTransmit {
 public:
-  static void init();
+  // Internal thread funcation that doesnt return
+  // Call this from a thread in your rtos
+  static void thread();
   // Push a message to the queue to be sent out the pd comms bus
   static void pushMessage(union pd_msg *msg);
 
@@ -43,7 +45,6 @@ public:
   static void notify(Notifications notification);
 
 private:
-  static void thread(const void *args);
   static EventGroupHandle_t xEventGroupHandle;
   static StaticEventGroup_t xCreatedEventGroup;
   static osThreadId TaskHandle;
