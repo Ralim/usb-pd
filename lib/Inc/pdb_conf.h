@@ -1,7 +1,6 @@
 /*
  * PD Buddy Firmware Library - USB Power Delivery for everyone
  * Copyright 2017-2018 Clayton G. Hobbs
- * Updated 2020-2021 Ben V. Brown <ralim@ralimtek.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,5 +22,10 @@
 #define PDB_MSG_POOL_SIZE 8
 
 #define EVENT_MASK(x) (1 << x)
+
+/* PD Buddy thread priorities */
+#define PDB_PRIO_PE        (osPriorityAboveNormal)
+#define PDB_PRIO_PRL       (osPriorityAboveNormal)
+#define PDB_PRIO_PRL_INT_N (osPriorityAboveNormal)
 
 #endif /* PDB_CONF_H */

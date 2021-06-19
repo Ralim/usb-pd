@@ -1,7 +1,6 @@
 /*
  * PD Buddy Firmware Library - USB Power Delivery for everyone
  * Copyright 2017-2018 Clayton G. Hobbs
- * Updated 2020-2021 Ben V. Brown <ralim@ralimtek.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,134 +18,137 @@
 #ifndef PDB_POLICY_ENGINE_H
 #define PDB_POLICY_ENGINE_H
 
-#include <pd.h>
-
-/*
- * Events for the Policy Engine thread, used internally + sent by user code
- *
- */
+#include "fusb302b.h"
+#include "pd.h"
 
 class PolicyEngine {
 public:
-  static void thread();
+  PolicyEngine(FUSB302 fusbStruct);
 
-  // Push an incoming message to the Policy Engine
-  static void handleMessage(union pd_msg *msg);
+  // Runs the internal thread. DOES NOT RETURN
+  void thread();
+
   // Returns true if headers indicate PD3.0 compliant
-  static bool isPD3_0();
-  static bool setupCompleteOrTimedOut() {
-    if (pdNegotiationComplete)
+  bool isPD3_0();
+  bool setupCompleteOrTimedOut(uint8_t timeout) {
+    if (pdNegotiationComplete) {
       return true;
-    if (state == policy_engine_state::PESinkSourceUnresponsive)
+    }
+    if (PolicyEngine::NegotiationTimeoutReached(timeout)) {
       return true;
-    if (state == policy_engine_state::PESinkReady)
+    }
+    if (state == policy_engine_state::PESinkSourceUnresponsive) {
       return true;
+    }
+    if (state == policy_engine_state::PESinkReady) {
+      return true;
+    }
     return false;
   }
   // Has pd negotiation completed
-  static bool pdHasNegotiated() {
+  bool pdHasNegotiated() {
     if (state == policy_engine_state::PESinkSourceUnresponsive)
       return false;
     return true;
   }
-  // Call this periodically, at least once every second
-  static void PPSTimerCallback();
+  // Call this periodically, at least once every second or so
+  void PPSTimerCallback();
 
-  enum class Notifications {
-    PDB_EVT_PE_RESET = EVENT_MASK(0),
-    PDB_EVT_PE_MSG_RX = EVENT_MASK(1),
-    PDB_EVT_PE_TX_DONE = EVENT_MASK(2),
-    PDB_EVT_PE_TX_ERR = EVENT_MASK(3),
-    PDB_EVT_PE_HARD_SENT = EVENT_MASK(4),
-    PDB_EVT_PE_I_OVRTEMP = EVENT_MASK(5),
-    PDB_EVT_PE_PPS_REQUEST = EVENT_MASK(6),
-    PDB_EVT_PE_GET_SOURCE_CAP = EVENT_MASK(7),
-    PDB_EVT_PE_NEW_POWER = EVENT_MASK(8),
-    PDB_EVT_PE_ALL = (EVENT_MASK(9) - 1),
-  };
-  // Send a notification
-  static void notify(Notifications notification);
+  bool NegotiationTimeoutReached(uint8_t timeout);
+
   // Debugging allows looking at state
-  static uint32_t getState() { return (uint32_t)state; }
+  uint32_t getState() { return (uint32_t)state; }
+
+  bool IRQOccured();
 
 private:
-  static bool pdNegotiationComplete;
-  static int current_voltage_mv;    // The current voltage PD is expecting
-  static int _requested_voltage;    // The voltage the unit wanted to requests
-  static bool _unconstrained_power; // If the source is unconstrained
-  // Current message being handled
-  static union pd_msg currentMessage;
-  /* PD message header template */
-  static uint16_t hdr_template;
-  /* Whether or not we have an explicit contract */
-  static bool _explicit_contract;
-  /* The number of hard resets we've sent */
-  static int8_t _hard_reset_counter;
-  /* The result of the last Type-C Current match comparison */
-  static int8_t _old_tcc_match;
-  /* The index of the first PPS APDO */
-  static uint8_t _pps_index;
-
-  enum policy_engine_state {
-    PESinkStartup,
-    PESinkDiscovery,
-    PESinkWaitCap,
-    PESinkEvalCap,
-    PESinkSelectCap,      // 4
-    PESinkTransitionSink, // 5
-    PESinkReady,          // 6
-    PESinkGetSourceCap,
-    PESinkGiveSinkCap,
-    PESinkHardReset,
-    PESinkTransitionDefault,
-    PESinkSoftReset,
-    PESinkSendSoftReset,
-    PESinkSendNotSupported,
-    PESinkChunkReceived,
-    PESinkNotSupportedReceived,
-    PESinkSourceUnresponsive
+  // Push an incoming message to the Policy Engine
+  void handleMessage(pd_msg *msg);
+  void readPendingMessage();
+  enum class Notifications {
+    PDB_EVT_PE_RESET          = EVENT_MASK(0),
+    PDB_EVT_PE_MSG_RX         = EVENT_MASK(1),
+    PDB_EVT_PE_TX_DONE        = EVENT_MASK(2),
+    PDB_EVT_PE_TX_ERR         = EVENT_MASK(3),
+    PDB_EVT_PE_HARD_SENT      = EVENT_MASK(4),
+    PDB_EVT_PE_I_OVRTEMP      = EVENT_MASK(5),
+    PDB_EVT_PE_PPS_REQUEST    = EVENT_MASK(6),
+    PDB_EVT_PE_GET_SOURCE_CAP = EVENT_MASK(7),
+    PDB_EVT_PE_NEW_POWER      = EVENT_MASK(8),
+    PDB_EVT_TX_I_TXSENT       = EVENT_MASK(9),
+    PDB_EVT_TX_I_RETRYFAIL    = EVENT_MASK(10),
+    PDB_EVT_TX_DISCARD        = EVENT_MASK(11),
+    PDB_EVT_PE_ALL            = (EVENT_MASK(12) - 1),
   };
-  static enum policy_engine_state pe_sink_startup();
-  static enum policy_engine_state pe_sink_discovery();
-  static enum policy_engine_state pe_sink_wait_cap();
-  static enum policy_engine_state pe_sink_eval_cap();
-  static enum policy_engine_state pe_sink_select_cap();
-  static enum policy_engine_state pe_sink_transition_sink();
-  static enum policy_engine_state pe_sink_ready();
-  static enum policy_engine_state pe_sink_get_source_cap();
-  static enum policy_engine_state pe_sink_give_sink_cap();
-  static enum policy_engine_state pe_sink_hard_reset();
-  static enum policy_engine_state pe_sink_transition_default();
-  static enum policy_engine_state pe_sink_soft_reset();
-  static enum policy_engine_state pe_sink_send_soft_reset();
-  static enum policy_engine_state pe_sink_send_not_supported();
-  static enum policy_engine_state pe_sink_chunk_received();
-  static enum policy_engine_state pe_sink_not_supported_received();
-  static enum policy_engine_state pe_sink_source_unresponsive();
-  static EventGroupHandle_t xEventGroupHandle;
-  static StaticEventGroup_t xCreatedEventGroup;
-  static EventBits_t waitForEvent(uint32_t mask,
-                                  TickType_t ticksToWait = portMAX_DELAY);
-  // Task resources
-  static osThreadId TaskHandle;
-  static const size_t TaskStackSize = 2048 / 4;
-  static uint32_t TaskBuffer[TaskStackSize];
-  static osStaticThreadDef_t TaskControlBlock;
-  static union pd_msg tempMessage;
-  static union pd_msg _last_dpm_request;
-  static policy_engine_state state;
-  // queue of up to PDB_MSG_POOL_SIZE messages to send
-  static StaticQueue_t xStaticQueue;
-  /* The array to use as the queue's storage area.  This must be at least
-   uxQueueLength * uxItemSize bytes. */
-  static uint8_t ucQueueStorageArea[PDB_MSG_POOL_SIZE * sizeof(union pd_msg)];
-  static QueueHandle_t messagesWaiting;
-  static bool messageWaiting();
-  // Read a pending message into the temp message
-  static bool readMessage();
-  static bool PPSTimerEnabled;
-  static TickType_t PPSTimeLastEvent;
+  // Send a notification
+  void notify(Notifications notification);
 
+  const FUSB302 fusb;
+  bool          pdNegotiationComplete;
+  int           current_voltage_mv;   // The current voltage PD is expecting
+  int           _requested_voltage;   // The voltage the unit wanted to requests
+  bool          _unconstrained_power; // If the source is unconstrained
+                                      /* PD message header template */
+  uint16_t hdr_template;
+  /* Whether or not we have an explicit contract */
+  bool _explicit_contract;
+  /* The number of hard resets we've sent */
+  int8_t _hard_reset_counter;
+  /* The index of the first PPS APDO */
+  uint8_t _pps_index;
+
+  uint32_t pushMessage(pd_msg *msg);
+  uint8_t  _tx_messageidcounter;
+  typedef enum {
+    PESinkStartup,              // 0
+    PESinkDiscovery,            // 1
+    PESinkWaitCap,              // 2
+    PESinkEvalCap,              // 3
+    PESinkSelectCap,            // 4
+    PESinkTransitionSink,       // 5
+    PESinkReady,                // 6
+    PESinkGetSourceCap,         // 7
+    PESinkGiveSinkCap,          // 8
+    PESinkHardReset,            // 9
+    PESinkTransitionDefault,    // 10
+    PESinkSoftReset,            // 11
+    PESinkSendSoftReset,        // 12
+    PESinkSendNotSupported,     // 13
+    PESinkChunkReceived,        // 14
+    PESinkNotSupportedReceived, // 15
+    PESinkSourceUnresponsive    // 16
+
+  } policy_engine_state;
+  policy_engine_state pe_sink_startup();
+  policy_engine_state pe_sink_discovery();
+  policy_engine_state pe_sink_wait_cap();
+  policy_engine_state pe_sink_eval_cap();
+  policy_engine_state pe_sink_select_cap();
+  policy_engine_state pe_sink_transition_sink();
+  policy_engine_state pe_sink_ready();
+  policy_engine_state pe_sink_get_source_cap();
+  policy_engine_state pe_sink_give_sink_cap();
+  policy_engine_state pe_sink_hard_reset();
+  policy_engine_state pe_sink_transition_default();
+  policy_engine_state pe_sink_soft_reset();
+  policy_engine_state pe_sink_send_soft_reset();
+  policy_engine_state pe_sink_send_not_supported();
+  policy_engine_state pe_sink_chunk_received();
+  policy_engine_state pe_sink_not_supported_received();
+  policy_engine_state pe_sink_source_unresponsive();
+  // Event group
+  uint32_t waitForEvent(uint32_t mask, uint32_t ticksToWait = 0xFFFFFFFF);
+  // Temp messages for storage
+  pd_msg              tempMessage       = {0};
+  bool                rxMessageWaiting  = false;
+  pd_msg              rxMessage         = {0}; // irq will unpack recieved message to here
+  pd_msg              _last_dpm_request = {0};
+  policy_engine_state state             = policy_engine_state::PESinkStartup;
+  // Read a pending message into the temp message
+  bool     readMessage();
+  bool     PPSTimerEnabled;
+  uint32_t PPSTimeLastEvent;
+  int8_t   dpm_get_range_fixed_pdo_index(const pd_msg *caps);
   // These callbacks are called to implement the logic for the iron to select
   // the desired voltage
 
@@ -157,56 +159,42 @@ private:
    *
    * Returns true if sufficient power is available, false otherwise.
    */
-  static bool pdbs_dpm_evaluate_capability(const union pd_msg *capabilities,
-                                           union pd_msg *request);
+  bool pdbs_dpm_evaluate_capability(const pd_msg *capabilities, pd_msg *request);
 
   /*
    * Create a Sink_Capabilities message for our current capabilities.
    */
-  static void pdbs_dpm_get_sink_capability(union pd_msg *cap);
-
-  /*
-   * Return whether or not GiveBack support is enabled.
-   */
-  static bool pdbs_dpm_giveback_enabled();
-
-  /*
-   * Evaluate whether or not the currently offered Type-C Current can fulfill
-   * our power needs.
-   *
-   * Returns true if sufficient power is available, false otherwise.
-   */
-  static bool pdbs_dpm_evaluate_typec_current(enum fusb_typec_current tcc);
+  void pdbs_dpm_get_sink_capability(pd_msg *cap);
 
   /*
    * Indicate that power negotiations are starting.
    */
-  static void pdbs_dpm_pd_start();
+  void pdbs_dpm_pd_start();
 
   /*
    * Transition the sink to default power.
    */
-  static void pdbs_dpm_transition_default();
+  void pdbs_dpm_transition_default();
 
   /*
    * Transition to the requested minimum current.
    */
-  static void pdbs_dpm_transition_min();
+  void pdbs_dpm_transition_min();
 
   /*
    * Transition to Sink Standby if necessary.
    */
-  static void pdbs_dpm_transition_standby();
+  void pdbs_dpm_transition_standby();
 
   /*
    * Transition to the requested power level
    */
-  static void pdbs_dpm_transition_requested();
+  void pdbs_dpm_transition_requested();
 
   /*
    * Transition to the Type-C Current power level
    */
-  static void pdbs_dpm_transition_typec();
+  void pdbs_dpm_transition_typec();
 };
 
 #endif /* PDB_POLICY_ENGINE_H */

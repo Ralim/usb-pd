@@ -1,7 +1,6 @@
 /*
  * PD Buddy Firmware Library - USB Power Delivery for everyone
  * Copyright 2017-2018 Clayton G. Hobbs
- * Updated 2020-2021 Ben V. Brown <ralim@ralimtek.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,29 +15,19 @@
  * limitations under the License.
  */
 #include "fusb302b.h"
+#include "BSP.h"
+#include "I2C_Wrapper.hpp"
+#include "Setup.h"
+#include "fusb_user.h"
 #include "int_n.h"
-#include "pd.h"
-#include "user.h"
-/*
- * Write a single byte to the FUSB302B
- *
- * cfg: The FUSB302B to communicate with
- * addr: The memory address to which we will write
- * byte: The value to write
- */
-static bool fusb_write_byte(uint8_t addr, uint8_t byte) {
-  fusb_write_buf(addr, 1, (uint8_t *)&byte);
-  return true;
-}
-
-void fusb_send_message(const union pd_msg *msg) {
+#include <pd.h>
+uint8_t fusb_read_byte(uint8_t addr);
+bool    fusb_write_byte(uint8_t addr, uint8_t byte);
+void    FUSB302::fusb_send_message(const pd_msg *msg) {
 
   /* Token sequences for the FUSB302B */
-  static uint8_t sop_seq[5] = {FUSB_FIFO_TX_SOP1, FUSB_FIFO_TX_SOP1,
-                               FUSB_FIFO_TX_SOP1, FUSB_FIFO_TX_SOP2,
-                               FUSB_FIFO_TX_PACKSYM};
-  static const uint8_t eop_seq[4] = {FUSB_FIFO_TX_JAM_CRC, FUSB_FIFO_TX_EOP,
-                                     FUSB_FIFO_TX_TXOFF, FUSB_FIFO_TX_TXON};
+  static uint8_t       sop_seq[5] = {FUSB_FIFO_TX_SOP1, FUSB_FIFO_TX_SOP1, FUSB_FIFO_TX_SOP1, FUSB_FIFO_TX_SOP2, FUSB_FIFO_TX_PACKSYM};
+  static const uint8_t eop_seq[4] = {FUSB_FIFO_TX_JAM_CRC, FUSB_FIFO_TX_EOP, FUSB_FIFO_TX_TXOFF, FUSB_FIFO_TX_TXON};
 
   /* Take the I2C2 mutex now so there can't be a race condition on sop_seq */
   /* Get the length of the message: a two-octet header plus NUMOBJ four-octet
@@ -54,15 +43,21 @@ void fusb_send_message(const union pd_msg *msg) {
   fusb_write_buf(FUSB_FIFOS, 4, eop_seq);
 }
 
-uint8_t fusb_read_message(union pd_msg *msg) {
+bool FUSB302::fusb_rx_pending() { return (fusb_read_byte(FUSB_STATUS1) & FUSB_STATUS1_RX_EMPTY) != FUSB_STATUS1_RX_EMPTY; }
+
+uint8_t FUSB302::fusb_read_message(pd_msg *msg) {
 
   static uint8_t garbage[4];
-  uint8_t numobj;
+  uint8_t        numobj;
 
   // Read the header. If its not a SOP we dont actually want it at all
   // But on some revisions of the fusb if you dont both pick them up and read
   // them out of the fifo, it gets stuck
-  fusb_read_buf(FUSB_FIFOS, 1, garbage);
+  if ((fusb_read_byte(FUSB_FIFOS) & FUSB_FIFO_RX_TOKEN_BITS) != FUSB_FIFO_RX_SOP) {
+    return 1;
+  }
+
+  //	fusb_read_byte(FUSB_FIFOS);
   /* Read the message header into msg */
   fusb_read_buf(FUSB_FIFOS, 2, msg->bytes);
   /* Get the number of data objects */
@@ -77,22 +72,19 @@ uint8_t fusb_read_message(union pd_msg *msg) {
   return 0;
 }
 
-void fusb_send_hardrst() {
+void FUSB302::fusb_send_hardrst() {
 
   /* Send a hard reset */
   fusb_write_byte(FUSB_CONTROL3, 0x07 | FUSB_CONTROL3_SEND_HARD_RESET);
 }
 
-bool fusb_setup() {
-  if (!probe(FUSB302B_ADDR)) {
-    return false;
-  }
+bool FUSB302::fusb_setup() {
   /* Fully reset the FUSB302B */
   fusb_write_byte(FUSB_RESET, FUSB_RESET_SW_RES);
-  osDelay(2);
+  vTaskDelay(TICKS_10MS);
   uint8_t tries = 0;
   while (!fusb_read_id()) {
-    osDelay(10);
+    vTaskDelay(TICKS_10MS);
     tries++;
     if (tries > 5) {
       return false; // Welp :(
@@ -118,25 +110,21 @@ bool fusb_setup() {
 
   /* Measure CC1 */
   fusb_write_byte(FUSB_SWITCHES0, 0x07);
-  osDelay(10);
-  uint8_t cc1;
-  fusb_read_buf(FUSB_STATUS0, 1, &cc1);
-  cc1 &= FUSB_STATUS0_BC_LVL;
+  vTaskDelay(TICKS_10MS);
+  uint8_t cc1 = fusb_read_byte(FUSB_STATUS0) & FUSB_STATUS0_BC_LVL;
 
   /* Measure CC2 */
   fusb_write_byte(FUSB_SWITCHES0, 0x0B);
-  osDelay(10);
-  uint8_t cc2;
-  fusb_read_buf(FUSB_STATUS0, 1, &cc2);
-  cc1 &= FUSB_STATUS0_BC_LVL;
+  vTaskDelay(TICKS_10MS);
+  uint8_t cc2 = fusb_read_byte(FUSB_STATUS0) & FUSB_STATUS0_BC_LVL;
 
   /* Select the correct CC line for BMC signaling; also enable AUTO_CRC */
   if (cc1 > cc2) {
-    fusb_write_byte(FUSB_SWITCHES1, 0x25);
-    fusb_write_byte(FUSB_SWITCHES0, 0x07);
+    fusb_write_byte(FUSB_SWITCHES1, 0x25); // TX_CC1|AUTO_CRC|SPECREV0
+    fusb_write_byte(FUSB_SWITCHES0, 0x07); // PWDN1|PWDN2|MEAS_CC1
   } else {
-    fusb_write_byte(FUSB_SWITCHES1, 0x26);
-    fusb_write_byte(FUSB_SWITCHES0, 0x0B);
+    fusb_write_byte(FUSB_SWITCHES1, 0x26); // TX_CC2|AUTO_CRC|SPECREV0
+    fusb_write_byte(FUSB_SWITCHES0, 0x0B); // PWDN1|PWDN2|MEAS_CC2
   }
 
   fusb_reset();
@@ -144,32 +132,31 @@ bool fusb_setup() {
   return true;
 }
 
-void fusb_get_status(union fusb_status *status) {
+bool FUSB302::fusb_get_status(fusb_status *status) {
 
   /* Read the interrupt and status flags into status */
-  fusb_read_buf(FUSB_STATUS0A, 7, status->bytes);
+  return fusb_read_buf(FUSB_STATUS0A, 7, status->bytes);
 }
 
-enum fusb_typec_current fusb_get_typec_current() {
+enum fusb_typec_current FUSB302::fusb_get_typec_current() {
 
   /* Read the BC_LVL into a variable */
-  uint8_t bc_lvl;
-  fusb_read_buf(FUSB_STATUS0, 1, &bc_lvl);
-  bc_lvl &= FUSB_STATUS0_BC_LVL;
-  return (enum fusb_typec_current)bc_lvl;
+  enum fusb_typec_current bc_lvl = (enum fusb_typec_current)(fusb_read_byte(FUSB_STATUS0) & FUSB_STATUS0_BC_LVL);
+
+  return bc_lvl;
 }
 
-void fusb_reset() {
+void FUSB302::fusb_reset() {
 
   /* Flush the TX buffer */
   fusb_write_byte(FUSB_CONTROL0, 0x44);
   /* Flush the RX buffer */
   fusb_write_byte(FUSB_CONTROL1, FUSB_CONTROL1_RX_FLUSH);
   /* Reset the PD logic */
-  //	fusb_write_byte( FUSB_RESET, FUSB_RESET_PD_RESET);
+  fusb_write_byte(FUSB_RESET, FUSB_RESET_PD_RESET);
 }
 
-bool fusb_read_id() {
+bool FUSB302::fusb_read_id() {
   // Return true if read of the revision ID is sane
   uint8_t version = 0;
   fusb_read_buf(FUSB_DEVICE_ID, 1, &version);
@@ -177,3 +164,29 @@ bool fusb_read_id() {
     return false;
   return true;
 }
+/*
+ * Read a single byte from the FUSB302B
+ *
+ * cfg: The FUSB302B to communicate with
+ * addr: The memory address from which to read
+ *
+ * Returns the value read from addr.
+ */
+uint8_t FUSB302::fusb_read_byte(const uint8_t addr) {
+  uint8_t data[1];
+  if (!fusb_read_buf(addr, 1, (uint8_t *)data)) {
+    return 0;
+  }
+  return data[0];
+}
+
+/*
+ * Write a single byte to the FUSB302B
+ *
+ * cfg: The FUSB302B to communicate with
+ * addr: The memory address to which we will write
+ * byte: The value to write
+ */
+bool FUSB302::fusb_write_byte(const uint8_t addr, const uint8_t byte) { return fusb_write_buf(addr, 1, (uint8_t *)&byte); }
+
+FUSB302::FUSB302(uint8_t address, I2CFunc read, I2CFunc write) : DeviceAddress = address, I2CRead = read, I2CWrite = write {}

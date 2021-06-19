@@ -1,7 +1,6 @@
 /*
  * PD Buddy Firmware Library - USB Power Delivery for everyone
  * Copyright 2017-2018 Clayton G. Hobbs
- * Updated 2020-2021 Ben V. Brown <ralim@ralimtek.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,8 +18,6 @@
 #ifndef PDB_PD_H
 #define PDB_PD_H
 
-#include "FreeRTOS.h"
-#include "cmsis_os.h"
 #include "pdb_conf.h"
 #include "pdb_msg.h"
 #include <stdint.h>
