@@ -14,21 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #include "policy_engine.h"
 #include "fusb302b.h"
+#include <cstring>
 #include <pd.h>
 #include <stdbool.h>
 
-void PolicyEngine::PolicyEngine(FUSB302 fusbStruct) : fusb = fusbStruct { //
-  xEventGroupHandle = xEventGroupCreateStatic(&xCreatedEventGroup);
-}
-
 void PolicyEngine::notify(PolicyEngine::Notifications notification) {
   uint32_t val = (uint32_t)notification;
-  if (xEventGroupHandle != NULL) {
-    xEventGroupSetBits(xEventGroupHandle, val);
-  }
+  notifyEvent(val);
 }
 
 void PolicyEngine::thread() {
@@ -144,7 +138,9 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_cap() {
   /* If we got a message */
   if (evt & (uint32_t)Notifications::PDB_EVT_PE_MSG_RX) {
     /* Get the message */
-    while (readMessage()) {
+    if (rxMessageWaiting) {
+      memcpy(&tempMessage, &rxMessage, sizeof(rxMessage));
+      rxMessageWaiting = false;
       /* If we got a Source_Capabilities message, read it. */
       if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_SOURCE_CAPABILITIES && PD_NUMOBJ_GET(&tempMessage) > 0) {
         /* First, determine what PD revision we're using */
@@ -230,8 +226,9 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_select_cap() {
   }
 
   /* Get the response message */
-  if (messageWaiting()) {
-    readMessage();
+  if (rxMessageWaiting) {
+    memcpy(&tempMessage, &rxMessage, sizeof(rxMessage));
+    rxMessageWaiting = false;
     /* If the source accepted our request, wait for the new power */
     if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_ACCEPT && PD_NUMOBJ_GET(&tempMessage) == 0) {
       return PESinkTransitionSink;
@@ -263,8 +260,9 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_transition_sink() {
   }
 
   /* If we received a message, read it */
-  while (messageWaiting()) {
-    readMessage();
+  while (rxMessageWaiting) {
+    memcpy(&tempMessage, &rxMessage, sizeof(rxMessage));
+    rxMessageWaiting = false;
     /* If we got a PS_RDY, handle it */
     if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_PS_RDY && PD_NUMOBJ_GET(&tempMessage) == 0) {
       /* We just finished negotiating an explicit contract */
@@ -281,7 +279,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_transition_sink() {
 }
 
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_ready() {
-  uint32_t evt = waitForEvent((uint32_t)Notifications::PDB_EVT_PE_ALL);
+  uint32_t evt = waitForEvent((uint32_t)Notifications::PDB_EVT_PE_ALL, 0xFFFFFFFF);
   /* If SinkPPSPeriodicTimer ran out, send a new request */
   if (evt & (uint32_t)Notifications::PDB_EVT_PE_PPS_REQUEST) {
     return PESinkSelectCap;
@@ -310,8 +308,9 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_ready() {
 
   /* If we received a message */
   if (evt & (uint32_t)Notifications::PDB_EVT_PE_MSG_RX) {
-    if (messageWaiting()) {
-      readMessage();
+    if (rxMessageWaiting) {
+      memcpy(&tempMessage, &rxMessage, sizeof(rxMessage));
+      rxMessageWaiting = false;
       /* Ignore vendor-defined messages */
       if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_VENDOR_DEFINED && PD_NUMOBJ_GET(&tempMessage) > 0) {
         return PESinkReady;
@@ -498,8 +497,9 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_send_soft_reset() {
   }
 
   /* Get the response message */
-  if (messageWaiting()) {
-    readMessage();
+  if (rxMessageWaiting) {
+    memcpy(&tempMessage, &rxMessage, sizeof(rxMessage));
+    rxMessageWaiting = false;
     /* If the source accepted our soft reset, wait for capabilities. */
     if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_ACCEPT && PD_NUMOBJ_GET(&tempMessage) == 0) {
 
@@ -569,39 +569,19 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_source_unresponsive() {
   return PESinkSourceUnresponsive;
 }
 
-uint32_t PolicyEngine::waitForEvent(uint32_t mask, uint32_t ticksToWait) { return xEventGroupWaitBits(xEventGroupHandle, mask, mask, pdFALSE, ticksToWait); }
-
 bool PolicyEngine::isPD3_0() { return (hdr_template & PD_HDR_SPECREV) == PD_SPECREV_3_0; }
 
-void PolicyEngine::handleMessage(pd_msg *msg) {
-  xQueueSend(messagesWaiting, msg, 100);
-  notify(PolicyEngine::Notifications::PDB_EVT_PE_MSG_RX);
-}
+void PolicyEngine::handleMessage() { notify(PolicyEngine::Notifications::PDB_EVT_PE_MSG_RX); }
 
 void PolicyEngine::PPSTimerCallback() {
   if (PPSTimerEnabled && state == policy_engine_state::PESinkReady) {
-    // I believe even once per second is totally fine, but leaning on faster
-    // since everything seems cool with faster Have seen everything from 10ms to
-    // 1 second :D
-    if ((xTaskGetTickCount() - PPSTimeLastEvent) > (TICKS_SECOND)) {
+    // Have to periodically re-send to keep the voltage level active
+    if ((getTimeStamp() - PPSTimeLastEvent) > (1000)) {
       // Send a new PPS message
       PolicyEngine::notify(Notifications::PDB_EVT_PE_PPS_REQUEST);
-      PPSTimeLastEvent = xTaskGetTickCount();
+      PPSTimeLastEvent = getTimeStamp();
     }
   }
-}
-
-bool PolicyEngine::NegotiationTimeoutReached(uint8_t timeout) {
-  if (timeout == 0) {
-    return false;
-  }
-
-  if (xTaskGetTickCount() > (TICKS_100MS * timeout)) {
-    state = PESinkSourceUnresponsive;
-    return true;
-  }
-
-  return false;
 }
 
 uint32_t PolicyEngine::pushMessage(pd_msg *msg) {
@@ -621,10 +601,11 @@ uint32_t PolicyEngine::pushMessage(pd_msg *msg) {
     //    }
   }
   /* Send the message to the PHY */
-  fusb_send_message(msg);
+  fusb.fusb_send_message(msg);
   /* Waiting for response*/
   uint32_t evt = waitForEvent((uint32_t)Notifications::PDB_EVT_PE_RESET | (uint32_t)Notifications::PDB_EVT_TX_DISCARD | (uint32_t)Notifications::PDB_EVT_TX_I_TXSENT
-                              | (uint32_t)Notifications::PDB_EVT_TX_I_RETRYFAIL);
+                                  | (uint32_t)Notifications::PDB_EVT_TX_I_RETRYFAIL,
+                              0xFFFFFFFF);
 
   if ((uint32_t)evt & (uint32_t)Notifications::PDB_EVT_TX_DISCARD) {
     // increment the counter
@@ -637,7 +618,7 @@ uint32_t PolicyEngine::pushMessage(pd_msg *msg) {
     pd_msg goodcrc;
 
     /* Read the GoodCRC */
-    fusb_read_message(&goodcrc);
+    fusb.fusb_read_message(&goodcrc);
 
     /* Check that the message is correct */
     if (PD_MSGTYPE_GET(&goodcrc) == PD_MSGTYPE_GOODCRC && PD_NUMOBJ_GET(&goodcrc) == 0 && PD_MESSAGEID_GET(&goodcrc) == _tx_messageidcounter) {

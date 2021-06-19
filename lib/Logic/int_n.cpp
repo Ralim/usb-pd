@@ -32,7 +32,7 @@ void PolicyEngine::readPendingMessage() {
         notify(Notifications::PDB_EVT_TX_DISCARD);
 
         /* Pass the message to the policy engine. */
-        handleMessage(&rxMessage);
+        handleMessage();
       }
     }
   }

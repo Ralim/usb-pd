@@ -5,6 +5,7 @@
             "includePath": [
                 "${workspaceFolder}/**",
                 "${workspaceFolder}/lib/**",
+                "${workspaceFolder}/lib/FUSB302/**",
                 "${workspaceFolder}/lib/Inc/**"
             ],
             "defines": [],

@@ -23,7 +23,16 @@
 
 class PolicyEngine {
 public:
-  PolicyEngine(FUSB302 fusbStruct);
+  typedef uint32_t (*TimestampFunc)();
+  typedef uint32_t (*WaitEventFunc)(uint32_t event, uint32_t timeout);
+  typedef void (*NotifyEventFunc)(uint32_t event);
+  PolicyEngine(FUSB302 fusbStruct, TimestampFunc getTimestampF, WaitEventFunc waitForEventF, NotifyEventFunc notifyEventF)
+      : fusb(fusbStruct),            //
+        getTimeStamp(getTimestampF), //
+        waitForEvent(waitForEventF), //
+        notifyEvent(notifyEventF){
+            //
+        };
 
   // Runs the internal thread. DOES NOT RETURN
   void thread();
@@ -56,14 +65,14 @@ public:
 
   bool NegotiationTimeoutReached(uint8_t timeout);
 
-  // Debugging allows looking at state
-  uint32_t getState() { return (uint32_t)state; }
-
   bool IRQOccured();
 
 private:
+  const TimestampFunc   getTimeStamp;
+  const WaitEventFunc   waitForEvent;
+  const NotifyEventFunc notifyEvent;
   // Push an incoming message to the Policy Engine
-  void handleMessage(pd_msg *msg);
+  void handleMessage();
   void readPendingMessage();
   enum class Notifications {
     PDB_EVT_PE_RESET          = EVENT_MASK(0),
@@ -137,7 +146,6 @@ private:
   policy_engine_state pe_sink_not_supported_received();
   policy_engine_state pe_sink_source_unresponsive();
   // Event group
-  uint32_t waitForEvent(uint32_t mask, uint32_t ticksToWait = 0xFFFFFFFF);
   // Temp messages for storage
   pd_msg              tempMessage       = {0};
   bool                rxMessageWaiting  = false;
@@ -145,7 +153,6 @@ private:
   pd_msg              _last_dpm_request = {0};
   policy_engine_state state             = policy_engine_state::PESinkStartup;
   // Read a pending message into the temp message
-  bool     readMessage();
   bool     PPSTimerEnabled;
   uint32_t PPSTimeLastEvent;
   int8_t   dpm_get_range_fixed_pdo_index(const pd_msg *caps);

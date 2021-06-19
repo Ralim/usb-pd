@@ -23,15 +23,6 @@
 #include "pdb_msg.h"
 
 class FUSB302 {
-private:
-  const uint8_t DeviceAddress; // I2C address for this device
-  // I2C bus access functions, should return true if command worked
-  // Function to write data to the FUSB302
-  const bool (*I2CWrite)(const uint8_t addr, const uint8_t size, uint8_t *buf);
-
-  // Function to read data from the FUSB302
-  const bool (*I2CRead)(const uint8_t addr, const uint8_t size, uint8_t *buf);
-
 public:
   typedef bool (*I2CFunc)(const uint8_t addr, const uint8_t size, uint8_t *buf);
   FUSB302(uint8_t address, I2CFunc read, I2CFunc write);
@@ -71,8 +62,15 @@ public:
   bool fusb_read_id() const;
 
 private:
-  uint8_t fusb_read_byte(const uint8_t addr);
-  bool fusb_write_byte(const uint8_t addr, const uint8_t byte);
+  const uint8_t DeviceAddress; // I2C address for this device
+  // I2C bus access functions, should return true if command worked
+  // Function to write data to the FUSB302
+  const I2CFunc I2CWrite;
+
+  // Function to read data from the FUSB302
+  const I2CFunc I2CRead;
+  uint8_t       fusb_read_byte(const uint8_t addr);
+  bool          fusb_write_byte(const uint8_t addr, const uint8_t byte);
 };
 
 #endif /* PDB_FUSB302B_H */
