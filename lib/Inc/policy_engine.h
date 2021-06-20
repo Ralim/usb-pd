@@ -32,9 +32,11 @@ public:
       : fusb(fusbStruct),            //
         getTimeStamp(getTimestampF), //
         waitForEvent(waitForEventF), //
-        osDelay(delayFuncF), notifyEvent(notifyEventF){
-                                 //
-                             };
+        osDelay(delayFuncF),         //
+        notifyEvent(notifyEventF)    //
+        {
+            //
+        };
 
   // Runs the internal thread. DOES NOT RETURN
   void thread();
