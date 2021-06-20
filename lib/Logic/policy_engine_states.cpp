@@ -15,9 +15,7 @@
  * limitations under the License.
  */
 
-#include "Defines.h"
 #include "fusb302b.h"
-#include "int_n.h"
 #include "policy_engine.h"
 #include <pd.h>
 #include <stdbool.h>
@@ -66,7 +64,9 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_cap() {
   /* If we got a message */
   if (evt & (uint32_t)Notifications::PDB_EVT_PE_MSG_RX) {
     /* Get the message */
-    while (readMessage()) {
+    while (rxMessageWaiting) {
+      memcpy(&tempMessage, &rxMessage, sizeof(rxMessage));
+      rxMessageWaiting = false;
       /* If we got a Source_Capabilities message, read it. */
       if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_SOURCE_CAPABILITIES && PD_NUMOBJ_GET(&tempMessage) > 0) {
         /* First, determine what PD revision we're using */
@@ -152,8 +152,9 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_select_cap() {
   }
 
   /* Get the response message */
-  if (messageWaiting()) {
-    readMessage();
+  if (rxMessageWaiting) {
+    memcpy(&tempMessage, &rxMessage, sizeof(rxMessage));
+    rxMessageWaiting = false;
     /* If the source accepted our request, wait for the new power */
     if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_ACCEPT && PD_NUMOBJ_GET(&tempMessage) == 0) {
       return PESinkTransitionSink;
@@ -185,8 +186,9 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_transition_sink() {
   }
 
   /* If we received a message, read it */
-  while (messageWaiting()) {
-    readMessage();
+  while (rxMessageWaiting) {
+    memcpy(&tempMessage, &rxMessage, sizeof(rxMessage));
+    rxMessageWaiting = false;
     /* If we got a PS_RDY, handle it */
     if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_PS_RDY && PD_NUMOBJ_GET(&tempMessage) == 0) {
       /* We just finished negotiating an explicit contract */
@@ -203,7 +205,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_transition_sink() {
 }
 
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_ready() {
-  uint32_t evt = waitForEvent((uint32_t)Notifications::PDB_EVT_PE_ALL);
+  uint32_t evt = waitForEvent((uint32_t)Notifications::PDB_EVT_PE_ALL, 0xFFFFFFFF);
   /* If SinkPPSPeriodicTimer ran out, send a new request */
   if (evt & (uint32_t)Notifications::PDB_EVT_PE_PPS_REQUEST) {
     return PESinkSelectCap;
@@ -232,8 +234,9 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_ready() {
 
   /* If we received a message */
   if (evt & (uint32_t)Notifications::PDB_EVT_PE_MSG_RX) {
-    if (messageWaiting()) {
-      readMessage();
+    if (rxMessageWaiting) {
+      memcpy(&tempMessage, &rxMessage, sizeof(rxMessage));
+      rxMessageWaiting = false;
       /* Ignore vendor-defined messages */
       if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_VENDOR_DEFINED && PD_NUMOBJ_GET(&tempMessage) > 0) {
         return PESinkReady;
@@ -420,8 +423,9 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_send_soft_reset() {
   }
 
   /* Get the response message */
-  if (messageWaiting()) {
-    readMessage();
+  if (rxMessageWaiting) {
+    memcpy(&tempMessage, &rxMessage, sizeof(rxMessage));
+    rxMessageWaiting = false;
     /* If the source accepted our soft reset, wait for capabilities. */
     if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_ACCEPT && PD_NUMOBJ_GET(&tempMessage) == 0) {
 

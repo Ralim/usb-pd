@@ -25,7 +25,9 @@
 class FUSB302 {
 public:
   typedef bool (*I2CFunc)(const uint8_t addr, const uint8_t size, uint8_t *buf);
-  FUSB302(uint8_t address, I2CFunc read, I2CFunc write);
+  typedef void (*DelayFunc)(uint32_t milliseconds);
+
+  FUSB302(uint8_t address, I2CFunc read, I2CFunc write, DelayFunc delay) : DeviceAddress(address), I2CRead(read), I2CWrite(write), osDelay(delay){};
 
   void fusb_send_message(const pd_msg *msg) const;
   bool fusb_rx_pending() const;
@@ -62,15 +64,16 @@ public:
   bool fusb_read_id() const;
 
 private:
-  const uint8_t DeviceAddress; // I2C address for this device
+  const DelayFunc osDelay;
+  const uint8_t   DeviceAddress; // I2C address for this device
   // I2C bus access functions, should return true if command worked
   // Function to write data to the FUSB302
   const I2CFunc I2CWrite;
 
   // Function to read data from the FUSB302
   const I2CFunc I2CRead;
-  uint8_t       fusb_read_byte(const uint8_t addr);
-  bool          fusb_write_byte(const uint8_t addr, const uint8_t byte);
+  uint8_t       fusb_read_byte(const uint8_t addr) const;
+  bool          fusb_write_byte(const uint8_t addr, const uint8_t byte) const;
 };
 
 #endif /* PDB_FUSB302B_H */

@@ -17,22 +17,24 @@
 
 #ifndef PDB_POLICY_ENGINE_H
 #define PDB_POLICY_ENGINE_H
-
 #include "fusb302b.h"
 #include "pd.h"
+#include <cstring>
+#include <stdint.h>
 
 class PolicyEngine {
 public:
   typedef uint32_t (*TimestampFunc)();
   typedef uint32_t (*WaitEventFunc)(uint32_t event, uint32_t timeout);
   typedef void (*NotifyEventFunc)(uint32_t event);
-  PolicyEngine(FUSB302 fusbStruct, TimestampFunc getTimestampF, WaitEventFunc waitForEventF, NotifyEventFunc notifyEventF)
+  typedef void (*DelayFunc)(uint32_t milliseconds);
+  PolicyEngine(FUSB302 fusbStruct, TimestampFunc getTimestampF, WaitEventFunc waitForEventF, NotifyEventFunc notifyEventF, DelayFunc delayFuncF)
       : fusb(fusbStruct),            //
         getTimeStamp(getTimestampF), //
         waitForEvent(waitForEventF), //
-        notifyEvent(notifyEventF){
-            //
-        };
+        osDelay(delayFuncF), notifyEvent(notifyEventF){
+                                 //
+                             };
 
   // Runs the internal thread. DOES NOT RETURN
   void thread();
@@ -71,6 +73,7 @@ private:
   const TimestampFunc   getTimeStamp;
   const WaitEventFunc   waitForEvent;
   const NotifyEventFunc notifyEvent;
+  const DelayFunc       osDelay;
   // Push an incoming message to the Policy Engine
   void handleMessage();
   void readPendingMessage();
