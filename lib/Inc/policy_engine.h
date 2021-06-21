@@ -107,6 +107,8 @@ private:
     PESinkTransitionDefault,    //
     PESinkSoftReset,            //
     PESinkSendSoftReset,        //
+    PESinkSendSoftResetTxOK,    //
+    PESinkSendSoftResetResp,    //
     PESinkSendNotSupported,     //
     PESinkChunkReceived,        //
     PESinkNotSupportedReceived, //
@@ -156,6 +158,8 @@ private:
   policy_engine_state pe_sink_hard_reset();
   policy_engine_state pe_sink_transition_default();
   policy_engine_state pe_sink_soft_reset();
+  policy_engine_state pe_sink_send_soft_reset_resp();
+  policy_engine_state pe_sink_send_soft_reset_tx_ok();
   policy_engine_state pe_sink_send_soft_reset();
   policy_engine_state pe_sink_send_not_supported();
   policy_engine_state pe_sink_chunk_received();

@@ -269,7 +269,7 @@
  * Where a range is specified, the middle of the range (rounded down to the
  * nearest millisecond) is used.
  */
-#define PD_T_CHUNKING_NOT_SUPPORTED (1000 / 2)
+#define PD_T_CHUNKING_NOT_SUPPORTED (500)
 #define PD_T_HARD_RESET_COMPLETE    (1 * 1000)
 #define PD_T_PS_TRANSITION          (5 * 1000)
 #define PD_T_SENDER_RESPONSE        (2700)

@@ -21,7 +21,7 @@
 
 void PolicyEngine::notify(PolicyEngine::Notifications notification) {
   uint32_t val = (uint32_t)notification;
-  notifyEvent(val);
+  currentEvents |= val;
 }
 
 void PolicyEngine::thread() {
