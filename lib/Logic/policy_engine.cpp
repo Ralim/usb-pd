@@ -107,13 +107,14 @@ void PolicyEngine::PPSTimerCallback() {
     }
   }
 }
-
-uint32_t PolicyEngine::pushMessage(pd_msg *msg) {
+PolicyEngine::policy_engine_state PolicyEngine::pe_start_message_tx(PolicyEngine::policy_engine_state postTxState, PolicyEngine::policy_engine_state txFailState, pd_msg *msg) {
   if (PD_MSGTYPE_GET(msg) == PD_MSGTYPE_SOFT_RESET && PD_NUMOBJ_GET(msg) == 0) {
     /* Clear MessageIDCounter */
     _tx_messageidcounter = 0;
-    return (uint32_t)Notifications::PDB_EVT_PE_TX_DONE;
+    return postTxState; // Message is "done"
   }
+  postSendFailedState = txFailState;
+  postSendState       = postTxState;
   msg->hdr &= ~PD_HDR_MESSAGEID;
   msg->hdr |= (_tx_messageidcounter % 8) << PD_HDR_MESSAGEID_SHIFT;
 
@@ -126,42 +127,13 @@ uint32_t PolicyEngine::pushMessage(pd_msg *msg) {
   }
   /* Send the message to the PHY */
   fusb.fusb_send_message(msg);
-  /* Waiting for response*/
-  uint32_t evt = waitForEvent((uint32_t)Notifications::PDB_EVT_PE_RESET | (uint32_t)Notifications::PDB_EVT_TX_DISCARD | (uint32_t)Notifications::PDB_EVT_TX_I_TXSENT
-                                  | (uint32_t)Notifications::PDB_EVT_TX_I_RETRYFAIL,
-                              0xFFFFFFFF);
-
-  if ((uint32_t)evt & (uint32_t)Notifications::PDB_EVT_TX_DISCARD) {
-    // increment the counter
-    _tx_messageidcounter = (_tx_messageidcounter + 1) % 8;
-    return (uint32_t)Notifications::PDB_EVT_PE_TX_ERR; //
-  }
-
-  /* If the message was sent successfully */
-  if ((uint32_t)evt & (uint32_t)Notifications::PDB_EVT_TX_I_TXSENT) {
-    pd_msg goodcrc;
-
-    /* Read the GoodCRC */
-    fusb.fusb_read_message(&goodcrc);
-
-    /* Check that the message is correct */
-    if (PD_MSGTYPE_GET(&goodcrc) == PD_MSGTYPE_GOODCRC && PD_NUMOBJ_GET(&goodcrc) == 0 && PD_MESSAGEID_GET(&goodcrc) == _tx_messageidcounter) {
-      /* Increment MessageIDCounter */
-      _tx_messageidcounter = (_tx_messageidcounter + 1) % 8;
-
-      return (uint32_t)Notifications::PDB_EVT_PE_TX_DONE;
-    } else {
-      return (uint32_t)Notifications::PDB_EVT_PE_TX_ERR;
-    }
-  }
-  /* If the message failed to be sent */
-  if ((uint32_t)evt & (uint32_t)Notifications::PDB_EVT_TX_I_RETRYFAIL) {
-    return (uint32_t)Notifications::PDB_EVT_PE_TX_ERR;
-  }
-
-  /* Silence the compiler warning */
-  return (uint32_t)Notifications::PDB_EVT_PE_TX_ERR;
+  // Setup waiting for notification
+  return waitForEvent(PEWaitingMessageTx,
+                      (uint32_t)Notifications::PDB_EVT_PE_RESET | (uint32_t)Notifications::PDB_EVT_TX_DISCARD | (uint32_t)Notifications::PDB_EVT_TX_I_TXSENT
+                          | (uint32_t)Notifications::PDB_EVT_TX_I_RETRYFAIL,
+                      0xFFFFFFFF);
 }
+
 /*
  * Find the index of the first PDO from capabilities in the voltage range,
  * using the desired order.
@@ -195,4 +167,18 @@ int8_t PolicyEngine::dpm_get_range_fixed_pdo_index(const pd_msg *caps) {
     i += step;
   }
   return -1;
+}
+
+void PolicyEngine::clearEvents(uint32_t notification) { currentEvents &= ~notification; }
+
+PolicyEngine::policy_engine_state PolicyEngine::waitForEvent(PolicyEngine::policy_engine_state evalState, uint32_t notification, uint32_t timeout) {
+  // Record the new state, and the desired notifications mask, then schedule the waiter state
+  waitingEventsMask = notification;
+  // If notification is already present, we can continue straight to eval state
+  if (currentEvents & waitingEventsMask) {
+    return evalState;
+  }
+  postNotifcationEvalState = evalState;
+  waitingEventsTimeout     = getTimeStamp() + timeout;
+  return policy_engine_state::PEWaitingEvent;
 }

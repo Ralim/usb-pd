@@ -25,15 +25,11 @@
 class PolicyEngine {
 public:
   typedef uint32_t (*TimestampFunc)();
-  typedef uint32_t (*WaitEventFunc)(uint32_t event, uint32_t timeout);
-  typedef void (*NotifyEventFunc)(uint32_t event);
   typedef void (*DelayFunc)(uint32_t milliseconds);
-  PolicyEngine(FUSB302 fusbStruct, TimestampFunc getTimestampF, WaitEventFunc waitForEventF, NotifyEventFunc notifyEventF, DelayFunc delayFuncF)
+  PolicyEngine(FUSB302 fusbStruct, TimestampFunc getTimestampF, DelayFunc delayFuncF)
       : fusb(fusbStruct),            //
         getTimeStamp(getTimestampF), //
-        waitForEvent(waitForEventF), //
-        osDelay(delayFuncF),         //
-        notifyEvent(notifyEventF)    //
+        osDelay(delayFuncF)          //
         {
             //
         };
@@ -72,13 +68,52 @@ public:
   bool IRQOccured();
 
 private:
-  const TimestampFunc   getTimeStamp;
-  const WaitEventFunc   waitForEvent;
-  const NotifyEventFunc notifyEvent;
-  const DelayFunc       osDelay;
+  const TimestampFunc getTimeStamp;
+  const DelayFunc     osDelay;
   // Push an incoming message to the Policy Engine
   void handleMessage();
   void readPendingMessage();
+
+  const FUSB302 fusb;
+  bool          pdNegotiationComplete;
+  int           current_voltage_mv;   // The current voltage PD is expecting
+  int           _requested_voltage;   // The voltage the unit wanted to requests
+  bool          _unconstrained_power; // If the source is unconstrained
+
+  /* PD message header template */
+  uint16_t hdr_template;
+  /* Whether or not we have an explicit contract */
+  bool _explicit_contract;
+  /* The number of hard resets we've sent */
+  int8_t _hard_reset_counter;
+  /* The index of the first PPS APDO */
+  uint8_t _pps_index;
+
+  uint8_t _tx_messageidcounter;
+  typedef enum {
+    PESinkStartup,              // Start of state machine
+    PESinkDiscovery,            // no-op as source yells its features
+    PESinkSetupWaitCap,         // Setup events wanted by waitCap
+    PESinkWaitCap,              // Waiting for source
+    PESinkEvalCap,              //
+    PESinkSelectCapTx,          // Send cap selected
+    PESinkSelectCap,            // Wait send ok
+    PESinkWaitCapResp,          // Wait response message
+    PESinkTransitionSink,       //
+    PESinkReady,                //
+    PESinkGetSourceCap,         //
+    PESinkGiveSinkCap,          //
+    PESinkHardReset,            //
+    PESinkTransitionDefault,    //
+    PESinkSoftReset,            //
+    PESinkSendSoftReset,        //
+    PESinkSendNotSupported,     //
+    PESinkChunkReceived,        //
+    PESinkNotSupportedReceived, //
+    PESinkSourceUnresponsive,   //
+    PEWaitingEvent,             //
+    PEWaitingMessageTx,         //
+  } policy_engine_state;
   enum class Notifications {
     PDB_EVT_PE_RESET          = EVENT_MASK(0),
     PDB_EVT_PE_MSG_RX         = EVENT_MASK(1),
@@ -92,52 +127,28 @@ private:
     PDB_EVT_TX_I_TXSENT       = EVENT_MASK(9),
     PDB_EVT_TX_I_RETRYFAIL    = EVENT_MASK(10),
     PDB_EVT_TX_DISCARD        = EVENT_MASK(11),
-    PDB_EVT_PE_ALL            = (EVENT_MASK(12) - 1),
+    PDB_EVT_EVT_TIMEOUT       = EVENT_MASK(12),
+    PDB_EVT_PE_ALL            = (EVENT_MASK(13) - 1),
   };
   // Send a notification
-  void notify(Notifications notification);
+  void                notify(Notifications notification);
+  policy_engine_state postNotifcationEvalState;
+  policy_engine_state postSendState;
+  policy_engine_state postSendFailedState;
+  uint32_t            waitingEventsMask    = 0;
+  uint32_t            waitingEventsTimeout = 0;
+  uint32_t            currentEvents;
+  void                clearEvents(uint32_t notification);
+  policy_engine_state waitForEvent(policy_engine_state evalState, uint32_t notification, uint32_t timeout);
 
-  const FUSB302 fusb;
-  bool          pdNegotiationComplete;
-  int           current_voltage_mv;   // The current voltage PD is expecting
-  int           _requested_voltage;   // The voltage the unit wanted to requests
-  bool          _unconstrained_power; // If the source is unconstrained
-                                      /* PD message header template */
-  uint16_t hdr_template;
-  /* Whether or not we have an explicit contract */
-  bool _explicit_contract;
-  /* The number of hard resets we've sent */
-  int8_t _hard_reset_counter;
-  /* The index of the first PPS APDO */
-  uint8_t _pps_index;
-
-  uint32_t pushMessage(pd_msg *msg);
-  uint8_t  _tx_messageidcounter;
-  typedef enum {
-    PESinkStartup,              // 0
-    PESinkDiscovery,            // 1
-    PESinkWaitCap,              // 2
-    PESinkEvalCap,              // 3
-    PESinkSelectCap,            // 4
-    PESinkTransitionSink,       // 5
-    PESinkReady,                // 6
-    PESinkGetSourceCap,         // 7
-    PESinkGiveSinkCap,          // 8
-    PESinkHardReset,            // 9
-    PESinkTransitionDefault,    // 10
-    PESinkSoftReset,            // 11
-    PESinkSendSoftReset,        // 12
-    PESinkSendNotSupported,     // 13
-    PESinkChunkReceived,        // 14
-    PESinkNotSupportedReceived, // 15
-    PESinkSourceUnresponsive    // 16
-
-  } policy_engine_state;
   policy_engine_state pe_sink_startup();
   policy_engine_state pe_sink_discovery();
+  policy_engine_state pe_sink_setup_wait_cap();
   policy_engine_state pe_sink_wait_cap();
   policy_engine_state pe_sink_eval_cap();
   policy_engine_state pe_sink_select_cap();
+  policy_engine_state pe_sink_select_cap_tx();
+  policy_engine_state pe_sink_wait_cap_resp();
   policy_engine_state pe_sink_transition_sink();
   policy_engine_state pe_sink_ready();
   policy_engine_state pe_sink_get_source_cap();
@@ -150,6 +161,11 @@ private:
   policy_engine_state pe_sink_chunk_received();
   policy_engine_state pe_sink_not_supported_received();
   policy_engine_state pe_sink_source_unresponsive();
+  policy_engine_state pe_sink_wait_event();
+  policy_engine_state pe_sink_wait_send_done();
+  // Sending messages, starts send and returns next state
+  policy_engine_state pe_start_message_tx(policy_engine_state postTxState, policy_engine_state txFailState, pd_msg *msg);
+
   // Event group
   // Temp messages for storage
   pd_msg              tempMessage       = {0};

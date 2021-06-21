@@ -25,3 +25,8 @@ External Support required functions:
 Implementation notes:
 
 - If the irq call returns a `true` the PD task must run as soon as possible afterwards
+
+### Internal events
+
+The original code used rtos notifications to handle changes in the event loop.
+To allow these to work without an RTOS, the code implements a very expanded state machine
