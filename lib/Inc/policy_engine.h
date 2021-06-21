@@ -24,17 +24,32 @@
 
 class PolicyEngine {
 public:
+  // Functions required to be created by the user for their end application
+  /*
+   * Create a Request message based on the given Source_Capabilities message. If
+   * capabilities is NULL, the last non-null Source_Capabilities message passes
+   * is used.  If none has been provided, the behavior is undefined.
+   *
+   * Returns true if sufficient power is available, false otherwise.
+   */
+  typedef bool (*EvaluateCapabilityFunc)(const pd_msg *capabilities, pd_msg *request);
+
+  /*
+   * Create a Sink_Capabilities message for our current capabilities.
+   */
+  typedef void (*SinkCapabilityFunc)(pd_msg *cap, const int8_t pdo_index, const bool isPD3);
   typedef uint32_t (*TimestampFunc)();
   typedef void (*DelayFunc)(uint32_t milliseconds);
-  PolicyEngine(FUSB302 fusbStruct, TimestampFunc getTimestampF, DelayFunc delayFuncF)
-      : fusb(fusbStruct),            //
-        getTimeStamp(getTimestampF), //
-        osDelay(delayFuncF)          //
+  PolicyEngine(FUSB302 fusbStruct, TimestampFunc getTimestampF, DelayFunc delayFuncF, SinkCapabilityFunc sinkCapabilities, EvaluateCapabilityFunc evalFunc)
+      : fusb(fusbStruct),                               //
+        getTimeStamp(getTimestampF),                    //
+        pdbs_dpm_get_sink_capability(sinkCapabilities), //
+        pdbs_dpm_evaluate_capability(evalFunc),         //
+        osDelay(delayFuncF)                             //
   {
     hdr_template = PD_DATAROLE_UFP | PD_POWERROLE_SINK;
     _pps_index   = 0xFF;
   };
-
   // Runs the internal thread. DOES NOT RETURN
   void thread();
 
@@ -69,8 +84,11 @@ public:
   bool IRQOccured();
 
 private:
-  const TimestampFunc getTimeStamp;
-  const DelayFunc     osDelay;
+  const TimestampFunc          getTimeStamp;
+  const DelayFunc              osDelay;
+  const SinkCapabilityFunc     pdbs_dpm_get_sink_capability;
+  const EvaluateCapabilityFunc pdbs_dpm_evaluate_capability;
+
   // Push an incoming message to the Policy Engine
   void handleMessage();
   void readPendingMessage();
@@ -182,52 +200,6 @@ private:
   bool     PPSTimerEnabled;
   uint32_t PPSTimeLastEvent;
   int8_t   dpm_get_range_fixed_pdo_index(const pd_msg *caps);
-  // These callbacks are called to implement the logic for the iron to select
-  // the desired voltage
-
-  /*
-   * Create a Request message based on the given Source_Capabilities message. If
-   * capabilities is NULL, the last non-null Source_Capabilities message passes
-   * is used.  If none has been provided, the behavior is undefined.
-   *
-   * Returns true if sufficient power is available, false otherwise.
-   */
-  bool pdbs_dpm_evaluate_capability(const pd_msg *capabilities, pd_msg *request);
-
-  /*
-   * Create a Sink_Capabilities message for our current capabilities.
-   */
-  void pdbs_dpm_get_sink_capability(pd_msg *cap);
-
-  /*
-   * Indicate that power negotiations are starting.
-   */
-  void pdbs_dpm_pd_start();
-
-  /*
-   * Transition the sink to default power.
-   */
-  void pdbs_dpm_transition_default();
-
-  /*
-   * Transition to the requested minimum current.
-   */
-  void pdbs_dpm_transition_min();
-
-  /*
-   * Transition to Sink Standby if necessary.
-   */
-  void pdbs_dpm_transition_standby();
-
-  /*
-   * Transition to the requested power level
-   */
-  void pdbs_dpm_transition_requested();
-
-  /*
-   * Transition to the Type-C Current power level
-   */
-  void pdbs_dpm_transition_typec();
 };
 
 #endif /* PDB_POLICY_ENGINE_H */

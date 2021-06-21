@@ -110,9 +110,11 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_eval_cap() {
       break;
     }
   }
+  _unconstrained_power = tempMessage.obj[0] & PD_PDO_SRC_FIXED_UNCONSTRAINED;
 
   /* Ask the DPM what to request */
   if (pdbs_dpm_evaluate_capability(&tempMessage, &_last_dpm_request)) {
+    _last_dpm_request.hdr |= hdr_template;
     /* If we're using PD 3.0 */
     if ((hdr_template & PD_HDR_SPECREV) == PD_SPECREV_3_0) {
       /* If the request was for a PPS APDO, start time callbacks if not started
@@ -123,7 +125,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_eval_cap() {
         PPSTimerEnabled = false;
       }
     }
-    return PESinkSelectCap;
+    return PESinkSelectCapTx;
   }
 
   return PESinkWaitCap;
@@ -137,7 +139,6 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_select_cap_tx() {
 }
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_select_cap() {
   // Have transmitted the selected cap, transition to waiting for the response
-  uint32_t evt = currentEvents;
   clearEvents((uint32_t)Notifications::PDB_EVT_PE_ALL);
   // wait for a response
   return waitForEvent(PESinkWaitCapResp, (uint32_t)Notifications::PDB_EVT_PE_MSG_RX | (uint32_t)Notifications::PDB_EVT_PE_RESET | (uint32_t)Notifications::PDB_EVT_EVT_TIMEOUT, PD_T_SENDER_RESPONSE);
@@ -201,7 +202,6 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_transition_sink() {
       _explicit_contract = true;
 
       /* Negotiation finished */
-      pdbs_dpm_transition_requested();
       return waitForEvent(PESinkReady, (uint32_t)Notifications::PDB_EVT_PE_ALL, 0xFFFFFFFF);
       /* If there was a protocol error, send a hard reset */
     }
@@ -318,8 +318,11 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_give_sink_cap() {
   /* Get a message object */
   pd_msg *snk_cap = &tempMessage;
   /* Get our capabilities from the DPM */
-  pdbs_dpm_get_sink_capability(snk_cap);
-
+  pdbs_dpm_get_sink_capability(snk_cap, dpm_get_range_fixed_pdo_index(snk_cap), ((hdr_template & PD_HDR_SPECREV) >= PD_SPECREV_3_0));
+  /* Set the unconstrained power flag. */
+  if (_unconstrained_power) {
+    snk_cap->obj[0] |= PD_PDO_SNK_FIXED_UNCONSTRAINED;
+  }
   /* Transmit our capabilities */
   return pe_start_message_tx(PESinkReady, PESinkHardReset, snk_cap);
 }
@@ -341,9 +344,6 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_hard_reset() {
 
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_transition_default() {
   _explicit_contract = false;
-
-  /* Tell the DPM to transition to default power */
-  pdbs_dpm_transition_default();
 
   /* There is no local hardware to reset. */
   /* Since we never change our data role from UFP, there is no reason to set
