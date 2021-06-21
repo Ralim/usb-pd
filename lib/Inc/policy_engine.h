@@ -30,9 +30,10 @@ public:
       : fusb(fusbStruct),            //
         getTimeStamp(getTimestampF), //
         osDelay(delayFuncF)          //
-        {
-            //
-        };
+  {
+    hdr_template = PD_DATAROLE_UFP | PD_POWERROLE_SINK;
+    _pps_index   = 0xFF;
+  };
 
   // Runs the internal thread. DOES NOT RETURN
   void thread();

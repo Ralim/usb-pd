@@ -25,71 +25,84 @@ void PolicyEngine::notify(PolicyEngine::Notifications notification) {
 }
 
 void PolicyEngine::thread() {
-  // Internal thread loop
-  hdr_template = PD_DATAROLE_UFP | PD_POWERROLE_SINK;
-  /* Initialize the old_tcc_match */
-  /* Initialize the pps_index */
-  _pps_index = 0xFF;
 
-  for (;;) {
-    // Loop based on state
-    switch (state) {
+  switch (state) {
 
-    case PESinkStartup:
-      state = pe_sink_startup();
-      break;
-    case PESinkDiscovery:
-      state = pe_sink_discovery();
-      break;
-    case PESinkWaitCap:
-      state = pe_sink_wait_cap();
-      break;
-    case PESinkEvalCap:
-      state = pe_sink_eval_cap();
-      break;
-    case PESinkSelectCap:
-      state = pe_sink_select_cap();
-      break;
-    case PESinkTransitionSink:
-      state = pe_sink_transition_sink();
-      break;
-    case PESinkReady:
-      state = pe_sink_ready();
-      break;
-    case PESinkGetSourceCap:
-      state = pe_sink_get_source_cap();
-      break;
-    case PESinkGiveSinkCap:
-      state = pe_sink_give_sink_cap();
-      break;
-    case PESinkHardReset:
-      state = pe_sink_hard_reset();
-      break;
-    case PESinkTransitionDefault:
-      state = pe_sink_transition_default();
-      break;
-    case PESinkSoftReset:
-      state = pe_sink_soft_reset();
-      break;
-    case PESinkSendSoftReset:
-      state = pe_sink_send_soft_reset();
-      break;
-    case PESinkSendNotSupported:
-      state = pe_sink_send_not_supported();
-      break;
-    case PESinkChunkReceived:
-      state = pe_sink_chunk_received();
-      break;
-    case PESinkSourceUnresponsive:
-      state = pe_sink_source_unresponsive();
-      break;
-    case PESinkNotSupportedReceived:
-      state = pe_sink_not_supported_received();
-      break;
-    default:
-      state = PESinkStartup;
-      break;
-    }
+  case PESinkStartup:
+    state = pe_sink_startup();
+    break;
+  case PESinkDiscovery:
+    state = pe_sink_discovery();
+    break;
+  case PESinkSetupWaitCap:
+    state = pe_sink_setup_wait_cap();
+    break;
+  case PESinkWaitCap:
+    state = pe_sink_wait_cap();
+    break;
+  case PESinkEvalCap:
+    state = pe_sink_eval_cap();
+    break;
+  case PESinkSelectCapTx:
+    state = pe_sink_select_cap_tx();
+    break;
+  case PESinkSelectCap:
+    state = pe_sink_select_cap();
+    break;
+  case PESinkWaitCapResp:
+    state = pe_sink_wait_cap_resp();
+    break;
+  case PESinkTransitionSink:
+    state = pe_sink_transition_sink();
+    break;
+  case PESinkReady:
+    state = pe_sink_ready();
+    break;
+  case PESinkGetSourceCap:
+    state = pe_sink_get_source_cap();
+    break;
+  case PESinkGiveSinkCap:
+    state = pe_sink_give_sink_cap();
+    break;
+  case PESinkHardReset:
+    state = pe_sink_hard_reset();
+    break;
+  case PESinkTransitionDefault:
+    state = pe_sink_transition_default();
+    break;
+  case PESinkSoftReset:
+    state = pe_sink_soft_reset();
+    break;
+  case PESinkSendSoftReset:
+    state = pe_sink_send_soft_reset();
+    break;
+  case PESinkSendSoftResetTxOK:
+    state = pe_sink_send_soft_reset_tx_ok();
+    break;
+  case PESinkSendSoftResetResp:
+    state = pe_sink_send_soft_reset_resp();
+    break;
+  case PESinkSendNotSupported:
+    state = pe_sink_send_not_supported();
+    break;
+  case PESinkChunkReceived:
+    state = pe_sink_chunk_received();
+    break;
+  case PESinkSourceUnresponsive:
+    state = pe_sink_source_unresponsive();
+    break;
+  case PESinkNotSupportedReceived:
+    state = pe_sink_not_supported_received();
+    break;
+  case PEWaitingEvent:
+    state = pe_sink_wait_event();
+    break;
+  case PEWaitingMessageTx:
+    state = pe_sink_wait_send_done();
+    break;
+  default:
+    state = PESinkStartup;
+    break;
   }
 }
 
