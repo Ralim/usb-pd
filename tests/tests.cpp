@@ -88,6 +88,23 @@ TEST(FUSB, ResetDevice) {
   f.fusb_reset();
 }
 
+TEST(FUSB, SendHardReset) {
+  auto mock_read = [](const uint8_t deviceAddress, const uint8_t address, const uint8_t size, uint8_t *buf) -> bool {
+    FAIL("No Reads should be required");
+    return false;
+  };
+  auto mock_write = [](const uint8_t deviceAddress, const uint8_t address, const uint8_t size, uint8_t *buf) -> bool {
+    CHECK_EQUAL(size, 1);
+    CHECK_EQUAL(FUSB_CONTROL3, address);
+    CHECK_EQUAL(buf[0], 0x07 | FUSB_CONTROL3_SEND_HARD_RESET);
+    return true;
+  };
+  auto mock_delay = [](uint32_t millis) {};
+
+  FUSB302 f = FUSB302(0x23 << 1, mock_read, mock_write, mock_delay);
+  f.fusb_send_hardrst();
+}
+
 TEST(FUSB, ReadTypeCCurrentLevels) {
   auto mock_read = [](const uint8_t deviceAddress, const uint8_t address, const uint8_t size, uint8_t *buf) -> bool {
     static uint8_t counter = 0;

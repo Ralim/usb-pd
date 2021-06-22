@@ -48,11 +48,11 @@ uint8_t FUSB302::fusb_read_message(pd_msg *msg) const {
   // Read the header. If its not a SOP we dont actually want it at all
   // But on some revisions of the fusb if you dont both pick them up and read
   // them out of the fifo, it gets stuck
+  // TODO this might need a tad more testing about how many bites we throw out
   if ((fusb_read_byte(FUSB_FIFOS) & FUSB_FIFO_RX_TOKEN_BITS) != FUSB_FIFO_RX_SOP) {
     return 1;
   }
 
-  //	fusb_read_byte(FUSB_FIFOS);
   /* Read the message header into msg */
   I2CRead(DeviceAddress, FUSB_FIFOS, 2, msg->bytes);
   /* Get the number of data objects */
