@@ -12,12 +12,14 @@ endif()
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(TEST_APP_NAME ${APP_NAME}_tests)
 set(TEST_SOURCES
-   test_fusb302.cpp
+    test_fusb302.cpp
     main.cpp
+    mock_fusb302.cpp
+    test_pd_policy_engine.cpp
 )
 
-include_directories(${CPPUTEST_INCLUDE_DIRS} PRIVATE ../lib/Inc ../lib/FUSB302)
-include_directories(${CPPUTEST_INCLUDE_DIRS} ../lib/)
+include_directories(${CPPUTEST_INCLUDE_DIRS} PRIVATE ../lib/ ../lib/Inc ../lib/FUSB302 )
+include_directories(${CPPUTEST_INCLUDE_DIRS} .)
 link_directories(${CPPUTEST_LIBRARIES})
 
 # (4) Build the unit tests objects and link then with the app library

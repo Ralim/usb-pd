@@ -2,6 +2,8 @@
     "C_Cpp.intelliSenseEngineFallback": "Enabled",
     "clang-tidy.buildPath": "lib/build",
     "files.associations": {
-        "cstring": "cpp"
+        "cstring": "cpp",
+        "random": "cpp",
+        "future": "cpp"
     }
 }
