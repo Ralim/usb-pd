@@ -84,20 +84,20 @@ public:
   bool IRQOccured();
 
 private:
+  const FUSB302                fusb;
   const TimestampFunc          getTimeStamp;
-  const DelayFunc              osDelay;
   const SinkCapabilityFunc     pdbs_dpm_get_sink_capability;
   const EvaluateCapabilityFunc pdbs_dpm_evaluate_capability;
+  const DelayFunc              osDelay;
 
   // Push an incoming message to the Policy Engine
   void handleMessage();
   void readPendingMessage();
 
-  const FUSB302 fusb;
-  bool          pdNegotiationComplete;
-  int           current_voltage_mv;   // The current voltage PD is expecting
-  int           _requested_voltage;   // The voltage the unit wanted to requests
-  bool          _unconstrained_power; // If the source is unconstrained
+  bool pdNegotiationComplete;
+  int  current_voltage_mv;   // The current voltage PD is expecting
+  int  _requested_voltage;   // The voltage the unit wanted to requests
+  bool _unconstrained_power; // If the source is unconstrained
 
   /* PD message header template */
   uint16_t hdr_template;

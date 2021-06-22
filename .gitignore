@@ -31,3 +31,4 @@
 *.out
 *.app
 lib/build/
+build/

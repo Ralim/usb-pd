@@ -64,16 +64,17 @@ public:
   bool fusb_read_id() const;
 
 private:
-  const DelayFunc osDelay;
-  const uint8_t   DeviceAddress; // I2C address for this device
+  const uint8_t DeviceAddress; // I2C address for this device
   // I2C bus access functions, should return true if command worked
-  // Function to write data to the FUSB302
-  const I2CFunc I2CWrite;
-
   // Function to read data from the FUSB302
   const I2CFunc I2CRead;
-  uint8_t       fusb_read_byte(const uint8_t addr) const;
-  bool          fusb_write_byte(const uint8_t addr, const uint8_t byte) const;
+  // Function to write data to the FUSB302
+  const I2CFunc I2CWrite;
+  // Simple Delay function used only during startup reset
+  const DelayFunc osDelay;
+
+  uint8_t fusb_read_byte(const uint8_t addr) const;
+  bool    fusb_write_byte(const uint8_t addr, const uint8_t byte) const;
 };
 
 #endif /* PDB_FUSB302B_H */
