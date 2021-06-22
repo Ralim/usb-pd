@@ -55,6 +55,90 @@ TEST(FUSB, ReadDeviceIDI2CFailsPath) {
   CHECK_EQUAL(false, f.fusb_read_id());
 }
 
+TEST(FUSB, RxMessagesPending) {
+  auto mock_read = [](const uint8_t deviceAddress, const uint8_t address, const uint8_t size, uint8_t *buf) -> bool {
+    static uint8_t pos             = 0;
+    const uint8_t  virtualBuffer[] = {0x00, 0x00, 1 << 5};
+    CHECK_EQUAL(FUSB_STATUS1, address);
+    memcpy(buf, virtualBuffer + pos, size);
+    pos += size;
+    CHECK_TRUE(pos <= sizeof(virtualBuffer));
+    return true;
+  };
+  auto mock_write = [](const uint8_t deviceAddress, const uint8_t address, const uint8_t size, uint8_t *buf) -> bool {
+    FAIL("Should not issue writes in read only functions");
+    return false;
+  };
+  auto mock_delay = [](uint32_t millis) {};
+
+  FUSB302 f = FUSB302(0x23 << 1, mock_read, mock_write, mock_delay);
+  CHECK_EQUAL(true, f.fusb_rx_pending());
+  CHECK_EQUAL(true, f.fusb_rx_pending());
+  CHECK_EQUAL(false, f.fusb_rx_pending());
+}
+TEST(FUSB, ReadGoodEmptyMessage) {
+  auto mock_read = [](const uint8_t deviceAddress, const uint8_t address, const uint8_t size, uint8_t *buf) -> bool {
+    static uint8_t pos             = 0;
+    const uint8_t  virtualBuffer[] = {0xE0, 0, 0, 1, 2, 3, 4};
+    CHECK_EQUAL(FUSB_FIFOS, address);
+    memcpy(buf, virtualBuffer + pos, size);
+    pos += size;
+    CHECK_TRUE(pos <= sizeof(virtualBuffer));
+    return true;
+  };
+  auto mock_write = [](const uint8_t deviceAddress, const uint8_t address, const uint8_t size, uint8_t *buf) -> bool {
+    FAIL("Should not issue writes in read only functions");
+    return false;
+  };
+  auto mock_delay = [](uint32_t millis) {};
+
+  FUSB302 f = FUSB302(0x23 << 1, mock_read, mock_write, mock_delay);
+  pd_msg  msg;
+  CHECK_EQUAL(0, f.fusb_read_message(&msg));
+}
+
+TEST(FUSB, ReadGoodMessage) {
+  auto mock_read = [](const uint8_t deviceAddress, const uint8_t address, const uint8_t size, uint8_t *buf) -> bool {
+    static uint8_t pos             = 0;
+    const uint8_t  virtualBuffer[] = {0xE0, 0, 1 << 4, 0xAA, 0xAA, 0xAA, 0xAA, 1, 2, 3, 4};
+    CHECK_EQUAL(FUSB_FIFOS, address);
+    memcpy(buf, virtualBuffer + pos, size);
+    pos += size;
+    CHECK_TRUE(pos <= sizeof(virtualBuffer));
+    return true;
+  };
+  auto mock_write = [](const uint8_t deviceAddress, const uint8_t address, const uint8_t size, uint8_t *buf) -> bool {
+    FAIL("Should not issue writes in read only functions");
+    return false;
+  };
+  auto mock_delay = [](uint32_t millis) {};
+
+  FUSB302 f = FUSB302(0x23 << 1, mock_read, mock_write, mock_delay);
+  pd_msg  msg;
+  CHECK_EQUAL(0, f.fusb_read_message(&msg));
+  CHECK_EQUAL(1, PD_NUMOBJ_GET(&msg));
+}
+TEST(FUSB, ReadIgnoredMessage) {
+  auto mock_read = [](const uint8_t deviceAddress, const uint8_t address, const uint8_t size, uint8_t *buf) -> bool {
+    static uint8_t pos             = 0;
+    const uint8_t  virtualBuffer[] = {0xD0, 0, 1 << 4, 0xAA, 0xAA, 0xAA, 0xAA, 1, 2, 3, 4};
+    CHECK_EQUAL(FUSB_FIFOS, address);
+    memcpy(buf, virtualBuffer + pos, size);
+    pos += size;
+    CHECK_TRUE(pos <= sizeof(virtualBuffer));
+    return true;
+  };
+  auto mock_write = [](const uint8_t deviceAddress, const uint8_t address, const uint8_t size, uint8_t *buf) -> bool {
+    FAIL("Should not issue writes in read only functions");
+    return false;
+  };
+  auto mock_delay = [](uint32_t millis) {};
+
+  FUSB302 f = FUSB302(0x23 << 1, mock_read, mock_write, mock_delay);
+  pd_msg  msg;
+  CHECK_EQUAL(1, f.fusb_read_message(&msg));
+  CHECK_EQUAL(1, PD_NUMOBJ_GET(&msg));
+}
 TEST(FUSB, ResetDevice) {
   auto mock_read = [](const uint8_t deviceAddress, const uint8_t address, const uint8_t size, uint8_t *buf) -> bool {
     FAIL("No Reads should be required");

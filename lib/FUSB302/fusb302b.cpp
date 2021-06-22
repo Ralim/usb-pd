@@ -24,7 +24,6 @@ void    FUSB302::fusb_send_message(const pd_msg *msg) const {
   static uint8_t       sop_seq[5] = {FUSB_FIFO_TX_SOP1, FUSB_FIFO_TX_SOP1, FUSB_FIFO_TX_SOP1, FUSB_FIFO_TX_SOP2, FUSB_FIFO_TX_PACKSYM};
   static const uint8_t eop_seq[4] = {FUSB_FIFO_TX_JAM_CRC, FUSB_FIFO_TX_EOP, FUSB_FIFO_TX_TXOFF, FUSB_FIFO_TX_TXON};
 
-  /* Take the I2C2 mutex now so there can't be a race condition on sop_seq */
   /* Get the length of the message: a two-octet header plus NUMOBJ four-octet
    * data objects */
   uint8_t msg_len = 2 + 4 * PD_NUMOBJ_GET(msg);
@@ -49,8 +48,9 @@ uint8_t FUSB302::fusb_read_message(pd_msg *msg) const {
   // But on some revisions of the fusb if you dont both pick them up and read
   // them out of the fifo, it gets stuck
   // TODO this might need a tad more testing about how many bites we throw out
+  uint8_t returnValue = 0;
   if ((fusb_read_byte(FUSB_FIFOS) & FUSB_FIFO_RX_TOKEN_BITS) != FUSB_FIFO_RX_SOP) {
-    return 1;
+    returnValue = 1;
   }
 
   /* Read the message header into msg */
@@ -64,7 +64,7 @@ uint8_t FUSB302::fusb_read_message(pd_msg *msg) const {
   /* Throw the CRC32 in the garbage, since the PHY already checked it. */
   I2CRead(DeviceAddress, FUSB_FIFOS, 4, garbage);
 
-  return 0;
+  return returnValue;
 }
 
 void FUSB302::fusb_send_hardrst() const {
