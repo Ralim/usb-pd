@@ -4,8 +4,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_compile_options(-std=c++11 -Wall -Werror)
 
-set(APP_NAME fooApp)
-set(APP_LIB_NAME fooAppLib)
+set(APP_NAME USBPD)
+set(APP_LIB_NAME USBPDLib)
 
 # (2) Include application build instructions
 add_subdirectory(lib)
