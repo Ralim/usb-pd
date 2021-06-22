@@ -12,7 +12,7 @@ endif()
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(TEST_APP_NAME ${APP_NAME}_tests)
 set(TEST_SOURCES
-   tests.cpp
+   test_fusb302.cpp
     main.cpp
 )
 

@@ -358,3 +358,40 @@ TEST(FUSB, DeviceSetup) {
 
   f.fusb_setup();
 }
+
+TEST(FUSB, SendMessage) {
+  auto mock_read = [](const uint8_t deviceAddress, const uint8_t address, const uint8_t size, uint8_t *buf) -> bool {
+    FAIL("No reads");
+    return false;
+  };
+  auto mock_write = [](const uint8_t deviceAddress, const uint8_t address, const uint8_t size, uint8_t *buf) -> bool {
+    static uint8_t       step       = 0;
+    static const uint8_t sop_seq[5] = {FUSB_FIFO_TX_SOP1, FUSB_FIFO_TX_SOP1, FUSB_FIFO_TX_SOP1, FUSB_FIFO_TX_SOP2, FUSB_FIFO_TX_PACKSYM | (2)};
+    static const uint8_t eop_seq[4] = {FUSB_FIFO_TX_JAM_CRC, FUSB_FIFO_TX_EOP, FUSB_FIFO_TX_TXOFF, FUSB_FIFO_TX_TXON};
+
+    CHECK_EQUAL(FUSB_FIFOS, address);
+    switch (step) {
+    case 0:
+      CHECK_EQUAL(0, memcmp(sop_seq, buf, 5));
+      CHECK_EQUAL(5, size);
+      break;
+    case 1:
+      CHECK_EQUAL(2, size);
+      break;
+    case 2:
+      CHECK_EQUAL(0, memcmp(eop_seq, buf, 4));
+      CHECK_EQUAL(4, size);
+      break;
+    default:
+      FAIL("Unhandled write");
+    }
+    step++;
+    return true;
+  };
+  auto mock_delay = [](uint32_t millis) {};
+
+  FUSB302 f = FUSB302(0x23 << 1, mock_read, mock_write, mock_delay);
+  pd_msg  msg;
+  memset(&msg, 0, sizeof(msg));
+  f.fusb_send_message(&msg);
+}
