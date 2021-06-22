@@ -147,33 +147,113 @@ TEST(FUSB, ReadStatus) {
 
 TEST(FUSB, DeviceSetup) {
   auto mock_read = [](const uint8_t deviceAddress, const uint8_t address, const uint8_t size, uint8_t *buf) -> bool {
-    CHECK_EQUAL(FUSB_STATUS0A, address);
-    CHECK_EQUAL(7, size);
-    buf[0] = 1;
-    buf[1] = 2;
-    buf[2] = 3;
-    buf[3] = 4;
-    buf[4] = 5;
-    buf[5] = 6;
-    buf[6] = 7;
-
+    static uint8_t state = 0;
+    switch (state) {
+    case 0:
+      CHECK_EQUAL(FUSB_DEVICE_ID, address);
+      CHECK_EQUAL(1, size);
+      buf[0] = 0xFF; // Fake bad read first time
+      break;
+    case 1:
+      CHECK_EQUAL(FUSB_DEVICE_ID, address);
+      CHECK_EQUAL(1, size);
+      buf[0] = 1; // Good read second time
+      break;
+    case 2: // Reading CC1
+      CHECK_EQUAL(FUSB_STATUS0, address);
+      CHECK_EQUAL(1, size);
+      buf[0] = 1; // Return lower level for cc1
+      break;
+    case 3: // Reading CC2
+      CHECK_EQUAL(FUSB_STATUS0, address);
+      CHECK_EQUAL(1, size);
+      buf[0] = 2; // Return higher level for cc2
+      break;
+    default:
+      FAIL("Unhandled read");
+      break;
+    }
+    state++;
     return true;
   };
   auto mock_write = [](const uint8_t deviceAddress, const uint8_t address, const uint8_t size, uint8_t *buf) -> bool {
-    FAIL("No Writes");
-    return false;
+    static uint8_t state = 0;
+    CHECK_EQUAL(1, size);
+    switch (state) {
+    case 0: // issues reset first
+      CHECK_EQUAL(FUSB_RESET, address);
+      CHECK_EQUAL(FUSB_RESET_SW_RES, buf[0]);
+      break;
+    case 1: // Turns on all power sections
+      CHECK_EQUAL(FUSB_POWER, address);
+      CHECK_EQUAL(0x0F, buf[0]);
+      break;
+    case 2: // Turns on all interrupts
+      CHECK_EQUAL(FUSB_MASK1, address);
+      CHECK_EQUAL(0x00, buf[0]);
+      break;
+    case 3: // Turns on all interrupts
+      CHECK_EQUAL(FUSB_MASKA, address);
+      CHECK_EQUAL(0x00, buf[0]);
+      break;
+    case 4: // Turns on all interrupts
+      CHECK_EQUAL(FUSB_MASKB, address);
+      CHECK_EQUAL(0x00, buf[0]);
+      break;
+    case 5:
+      CHECK_EQUAL(FUSB_CONTROL0, address);
+      CHECK_EQUAL(0x03 << 2, buf[0]);
+      break;
+    case 6: // Enable auto re-send on error
+      CHECK_EQUAL(FUSB_CONTROL3, address);
+      CHECK_EQUAL(0x07, buf[0]);
+      break;
+    case 7: // Set defaults just-in-case
+      CHECK_EQUAL(FUSB_CONTROL2, address);
+      CHECK_EQUAL(0x00, buf[0]);
+      break;
+    case 8: // Issue buffer flush
+      CHECK_EQUAL(FUSB_CONTROL1, address);
+      CHECK_EQUAL(FUSB_CONTROL1_RX_FLUSH, buf[0]);
+      break;
+    case 9: // Enables measuring the CC 1
+      CHECK_EQUAL(FUSB_SWITCHES0, address);
+      CHECK_EQUAL(0x07, buf[0]);
+      break;
+    case 10: // Enables measuring the CC 2 pin
+      CHECK_EQUAL(FUSB_SWITCHES0, address);
+      CHECK_EQUAL(0x0B, buf[0]);
+      break;
+    case 11: // Selects to signal on cc2
+      CHECK_EQUAL(FUSB_SWITCHES1, address);
+      CHECK_EQUAL(0x26, buf[0]);
+      break;
+    case 12: // Selects to signal on cc2
+      CHECK_EQUAL(FUSB_SWITCHES0, address);
+      CHECK_EQUAL(0x0B, buf[0]);
+      break;
+    case 13:
+      CHECK_EQUAL(FUSB_CONTROL0, address);
+      CHECK_EQUAL(buf[0], 0x44);
+      break;
+    case 14:
+      CHECK_EQUAL(FUSB_CONTROL1, address);
+      CHECK_EQUAL(buf[0], FUSB_CONTROL1_RX_FLUSH);
+      break;
+    case 15:
+      CHECK_EQUAL(FUSB_RESET, address);
+      CHECK_EQUAL(buf[0], FUSB_RESET_PD_RESET);
+      break;
+    default:
+      FAIL("Unhandled write");
+      break;
+    }
+    state++;
+    return true;
   };
-  auto mock_delay = [](uint32_t millis) {};
+  auto mock_delay = [](uint32_t millis) { CHECK_EQUAL(10, millis); };
 
   FUSB302 f = FUSB302(0x23 << 1, mock_read, mock_write, mock_delay);
 
-  fusb_status statusOut;
-  f.fusb_get_status(&statusOut);
-  CHECK_EQUAL(1, statusOut.status0a);
-  CHECK_EQUAL(2, statusOut.status1a);
-  CHECK_EQUAL(3, statusOut.interrupta);
-  CHECK_EQUAL(4, statusOut.interruptb);
-  CHECK_EQUAL(5, statusOut.status0);
-  CHECK_EQUAL(6, statusOut.status1);
-  CHECK_EQUAL(7, statusOut.interrupt);
+  f.fusb_setup();
 }
