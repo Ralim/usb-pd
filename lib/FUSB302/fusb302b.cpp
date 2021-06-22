@@ -33,9 +33,9 @@ void    FUSB302::fusb_send_message(const pd_msg *msg) const {
   sop_seq[4] = FUSB_FIFO_TX_PACKSYM | msg_len;
 
   /* Write all three parts of the message to the TX FIFO */
-  I2CWrite(FUSB_FIFOS, 5, sop_seq);
-  I2CWrite(FUSB_FIFOS, msg_len, (uint8_t *)msg->bytes);
-  I2CWrite(FUSB_FIFOS, 4, (uint8_t *)eop_seq);
+  I2CWrite(DeviceAddress, FUSB_FIFOS, 5, sop_seq);
+  I2CWrite(DeviceAddress, FUSB_FIFOS, msg_len, (uint8_t *)msg->bytes);
+  I2CWrite(DeviceAddress, FUSB_FIFOS, 4, (uint8_t *)eop_seq);
 }
 
 bool FUSB302::fusb_rx_pending() const { return (fusb_read_byte(FUSB_STATUS1) & FUSB_STATUS1_RX_EMPTY) != FUSB_STATUS1_RX_EMPTY; }
@@ -54,15 +54,15 @@ uint8_t FUSB302::fusb_read_message(pd_msg *msg) const {
 
   //	fusb_read_byte(FUSB_FIFOS);
   /* Read the message header into msg */
-  I2CRead(FUSB_FIFOS, 2, msg->bytes);
+  I2CRead(DeviceAddress, FUSB_FIFOS, 2, msg->bytes);
   /* Get the number of data objects */
   numobj = PD_NUMOBJ_GET(msg);
   /* If there is at least one data object, read the data objects */
   if (numobj > 0) {
-    I2CRead(FUSB_FIFOS, numobj * 4, msg->bytes + 2);
+    I2CRead(DeviceAddress, FUSB_FIFOS, numobj * 4, msg->bytes + 2);
   }
   /* Throw the CRC32 in the garbage, since the PHY already checked it. */
-  I2CRead(FUSB_FIFOS, 4, garbage);
+  I2CRead(DeviceAddress, FUSB_FIFOS, 4, garbage);
 
   return 0;
 }
@@ -130,7 +130,7 @@ bool FUSB302::fusb_setup() const {
 bool FUSB302::fusb_get_status(fusb_status *status) const {
 
   /* Read the interrupt and status flags into status */
-  return I2CRead(FUSB_STATUS0A, 7, status->bytes);
+  return I2CRead(DeviceAddress, FUSB_STATUS0A, 7, status->bytes);
 }
 
 enum fusb_typec_current FUSB302::fusb_get_typec_current() const {
@@ -154,7 +154,10 @@ void FUSB302::fusb_reset() const {
 bool FUSB302::fusb_read_id() const {
   // Return true if read of the revision ID is sane
   uint8_t version = 0;
-  I2CRead(FUSB_DEVICE_ID, 1, &version);
+
+  bool res = I2CRead(DeviceAddress, FUSB_DEVICE_ID, 1, &version);
+  if (!res)
+    return res;
   if (version == 0 || version == 0xFF)
     return false;
   return true;
@@ -169,7 +172,7 @@ bool FUSB302::fusb_read_id() const {
  */
 uint8_t FUSB302::fusb_read_byte(const uint8_t addr) const {
   uint8_t data[1];
-  if (!I2CRead(addr, 1, (uint8_t *)data)) {
+  if (!I2CRead(DeviceAddress, addr, 1, (uint8_t *)data)) {
     return 0;
   }
   return data[0];
@@ -182,4 +185,4 @@ uint8_t FUSB302::fusb_read_byte(const uint8_t addr) const {
  * addr: The memory address to which we will write
  * byte: The value to write
  */
-bool FUSB302::fusb_write_byte(const uint8_t addr, const uint8_t byte) const { return I2CWrite(addr, 1, (uint8_t *)&byte); }
+bool FUSB302::fusb_write_byte(const uint8_t addr, const uint8_t byte) const { return I2CWrite(DeviceAddress, addr, 1, (uint8_t *)&byte); }

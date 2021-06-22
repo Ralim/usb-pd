@@ -24,7 +24,7 @@
 
 class FUSB302 {
 public:
-  typedef bool (*I2CFunc)(const uint8_t addr, const uint8_t size, uint8_t *buf);
+  typedef bool (*I2CFunc)(const uint8_t deviceAddr, const uint8_t registerAdd, const uint8_t size, uint8_t *buf);
   typedef void (*DelayFunc)(uint32_t milliseconds);
 
   FUSB302(uint8_t address, I2CFunc read, I2CFunc write, DelayFunc delay) : DeviceAddress(address), I2CRead(read), I2CWrite(write), osDelay(delay){};
