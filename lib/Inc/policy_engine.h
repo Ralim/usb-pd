@@ -76,7 +76,7 @@ public:
       return false;
     return true;
   }
-  // Call this periodically, at least once every second or so
+  // Call this periodically, by the spec at least once every 12 seconds. 1 is reccomended
   void PPSTimerCallback();
 
   bool NegotiationTimeoutReached(uint8_t timeout);
