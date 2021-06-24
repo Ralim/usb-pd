@@ -469,24 +469,14 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_event() {
   return policy_engine_state::PEWaitingEvent;
 }
 
-PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_send_done() {
-
-  /* Waiting for response*/
+PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_good_crc() {
   uint32_t evt = currentEvents;
-
+  clearEvents();
   if ((evt & (uint32_t)Notifications::PDB_EVT_EVT_TIMEOUT) || (evt & (uint32_t)Notifications::PDB_EVT_PE_RESET)) {
     return PESinkTransitionDefault;
   }
-
-  if ((uint32_t)evt & (uint32_t)Notifications::PDB_EVT_TX_DISCARD) {
-    // increment the counter
-    _tx_messageidcounter = (_tx_messageidcounter + 1) % 8;
-    notify(Notifications::PDB_EVT_PE_TX_ERR);
-    return postSendFailedState;
-  }
-
-  /* If the message was sent successfully */
-  if ((uint32_t)evt & (uint32_t)Notifications::PDB_EVT_TX_I_TXSENT) {
+  if (rxMessageWaiting) {
+    // Wait for the Good CRC
     pd_msg goodcrc;
 
     /* Read the GoodCRC */
@@ -502,6 +492,36 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_send_done() {
     } else {
       notify(Notifications::PDB_EVT_PE_TX_ERR);
       return postSendFailedState;
+    }
+  }
+  notify(Notifications::PDB_EVT_PE_TX_ERR);
+  return postSendFailedState;
+}
+PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_send_done() {
+
+  /* Waiting for response*/
+  uint32_t evt = currentEvents;
+  clearEvents();
+  if ((evt & (uint32_t)Notifications::PDB_EVT_EVT_TIMEOUT) || (evt & (uint32_t)Notifications::PDB_EVT_PE_RESET)) {
+    return PESinkTransitionDefault;
+  }
+
+  if ((uint32_t)evt & (uint32_t)Notifications::PDB_EVT_TX_DISCARD) {
+    // increment the counter
+    _tx_messageidcounter = (_tx_messageidcounter + 1) % 8;
+    notify(Notifications::PDB_EVT_PE_TX_ERR);
+    return postSendFailedState;
+  }
+
+  /* If the message was sent successfully */
+  if ((uint32_t)evt & (uint32_t)Notifications::PDB_EVT_TX_I_TXSENT) {
+
+    if (rxMessageWaiting) {
+      return pe_sink_wait_good_crc();
+    } else {
+      // No Good CRC has arrived, these should _normally_ come really fast, but users implementation may be lagging
+      // Setup a callback for this state
+      return waitForEvent(PEWaitingMessageGoodCRC, (uint32_t)Notifications::PDB_EVT_PE_MSG_RX, 100);
     }
   }
   /* If the message failed to be sent */

@@ -98,7 +98,47 @@ TEST(PD, PDNegotiationTest) {
     CHECK_TRUE(iterationCounter < 10);
   }
   pe.printStateName();
+  // We should now be able to pop the transmitted message out of the fifo
+  const uint8_t expectedPD21VPPSMessage[] = {18, 18, 18, 19, 134, 130, 16, 45, 52, 8, 115, 255, 20, 254, 161};
+  uint8_t       sendMessage[sizeof(expectedPD21VPPSMessage)];
+  CHECK_EQUAL(5 + 6 + 4, sizeof(expectedPD21VPPSMessage));
+  CHECK_TRUE(fusb_mock.readFiFo(sizeof(expectedPD21VPPSMessage), sendMessage));
+  for (size_t i = 0; i < sizeof(expectedPD21VPPSMessage); i++) {
+    // std::cout << "Validate Request Message" << i << "->" << (int)sendMessage[i] << "|" << (int)expectedPD21VPPSMessage[i] << std::endl;
+    CHECK_EQUAL(sendMessage[i], expectedPD21VPPSMessage[i]);
+  }
+
+  fusb_mock.setRegister(FUSB_INTERRUPTA, FUSB_INTERRUPTA_I_TXSENT);
+  pe.IRQOccured();
+  iterationCounter = 0;
+  while (pe.thread()) {
+    pe.printStateName();
+    iterationCounter++;
+    // std::cout << "Reading SOP Capablities iteration Counter" << iterationCounter << std::endl;
+    CHECK_TRUE(iterationCounter < 10);
+  }
+  pe.printStateName();
+
+  // Now that it has sent a "good" request, respond in kind with an acceptance
+  const uint8_t accept_message[] = {FUSB_FIFO_RX_SOP1, 0x63, 0x03, 0, 0, 0, 0}; // PS_ACCEPT with 0'ed CRC
+  fusb_mock.addToFIFO(sizeof(accept_message), accept_message);
+
+  fusb_mock.setRegister(FUSB_INTERRUPTB, FUSB_INTERRUPTB_I_GCRCSENT);
+  CHECK_TRUE(fusb.fusb_rx_pending());
+  pe.IRQOccured();
+  CHECK_FALSE(fusb.fusb_rx_pending());
+  fusb_mock.setRegister(FUSB_INTERRUPTB, 0);
+  iterationCounter = 0;
+  while (pe.thread()) {
+    pe.printStateName();
+    iterationCounter++;
+    // std::cout << "Reading SOP Capablities iteration Counter" << iterationCounter << std::endl;
+    CHECK_TRUE(iterationCounter < 10);
+  }
+  pe.printStateName();
 }
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /* The current draw when the output is disabled */
 #define DPM_MIN_CURRENT PD_MA2PDI(100)
@@ -154,6 +194,7 @@ bool pdbs_dpm_evaluate_capability(const pd_msg *capabilities, pd_msg *request) {
     }
   }
   if (bestIndex != 0xFF) {
+    std::cout << "Found desired capability at index " << (int)bestIndex << " for V " << bestIndexVoltage << " Current " << bestIndexCurrent << std::endl;
     /* We got what we wanted, so build a request for that */
     request->hdr = PD_MSGTYPE_REQUEST | PD_NUMOBJ(1);
     if (bestIsPPS) {

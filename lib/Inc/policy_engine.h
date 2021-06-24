@@ -113,6 +113,7 @@ private:
   typedef enum {
     PEWaitingEvent,             // Meta state: waiting for event or timeout
     PEWaitingMessageTx,         // Meta state: waiting for message tx to confirm
+    PEWaitingMessageGoodCRC,    // We have sent a message, waiting for a GoodCRC to come back
     PESinkStartup,              // Start of state machine
     PESinkDiscovery,            // no-op as source yells its features
     PESinkSetupWaitCap,         // Setup events wanted by waitCap
@@ -187,6 +188,7 @@ private:
   policy_engine_state pe_sink_source_unresponsive();
   policy_engine_state pe_sink_wait_event();
   policy_engine_state pe_sink_wait_send_done();
+  policy_engine_state pe_sink_wait_good_crc();
   // Sending messages, starts send and returns next state
   policy_engine_state pe_start_message_tx(policy_engine_state postTxState, policy_engine_state txFailState, pd_msg *msg);
 

@@ -2,6 +2,7 @@
 #include "CppUTest/TestHarness.h"
 #include "fusb302_defines.h"
 #include <cstring>
+#include <iostream>
 void MockFUSB302::reset() {
   // 0 init by default
   memset(mockRegs, 0, sizeof(mockRegs));
@@ -56,7 +57,7 @@ bool MockFUSB302::i2cWrite(const uint8_t deviceAddress, const uint8_t address, c
   bool addressValid = (deviceAddress == FUSB302B_ADDR) || (deviceAddress == FUSB302B01_ADDR) || (deviceAddress == FUSB302B10_ADDR) || (deviceAddress == FUSB302B11_ADDR);
   CHECK_TRUE(addressValid);
   if (address == FUSB_FIFOS) {
-    FAIL("TODO");
+    addToFIFO(size, buf);
   } else {
     for (int i = 0; i < size; i++) {
       setRegister(address + i, buf[i]);
@@ -106,6 +107,7 @@ uint8_t MockFUSB302::getRegister(const uint8_t reg) {
   return mockRegs[reg];
 }
 void MockFUSB302::addToFIFO(const uint8_t length, const uint8_t *data) {
+  std::cout << "Adding " << (int)length << " bytes to FiFo" << std::endl;
   for (int i = 0; i < length; i++) {
     addToFIFO(data[i]);
   }
@@ -123,6 +125,8 @@ void MockFUSB302::updateFiFoStatus() {
   }
 }
 bool MockFUSB302::readFiFo(const uint8_t length, uint8_t *buffer) {
+  std::cout << "FiFo Read of len " << (int)length << "." << std::endl;
+
   CHECK_TRUE(fifoContent.size() >= length);
   for (int i = 0; i < length; i++) {
     buffer[i] = fifoContent.front();
