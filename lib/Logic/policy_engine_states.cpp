@@ -17,6 +17,7 @@
 
 #include "fusb302b.h"
 #include "policy_engine.h"
+#include <iostream>
 #include <pd.h>
 #include <stdbool.h>
 
@@ -24,6 +25,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_startup() {
   /* We don't have an explicit contract currently */
   _explicit_contract = false;
   PPSTimerEnabled    = false;
+  currentEvents      = 0;
   // If desired could send an alert that PD is starting
 
   /* No need to reset the protocol layer here.  There are two ways into this
@@ -39,7 +41,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_discovery() {
   /* Wait for VBUS.  Since it's our only power source, we already know that
    * we have it, so just move on. */
 
-  return PESinkWaitCap;
+  return PESinkSetupWaitCap;
 }
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_setup_wait_cap() { //
   return waitForEvent(policy_engine_state::PESinkWaitCap, (uint32_t)Notifications::PDB_EVT_PE_MSG_RX | (uint32_t)Notifications::PDB_EVT_PE_I_OVRTEMP | (uint32_t)Notifications::PDB_EVT_PE_RESET,
@@ -49,7 +51,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_setup_wait_cap() { //
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_cap() {
   /* Fetch a message from the protocol layer */
   uint32_t evt = currentEvents;
-  clearEvents((uint32_t)Notifications::PDB_EVT_PE_MSG_RX | (uint32_t)Notifications::PDB_EVT_EVT_TIMEOUT | (uint32_t)Notifications::PDB_EVT_PE_I_OVRTEMP | (uint32_t)Notifications::PDB_EVT_PE_RESET);
+  clearEvents();
 
   /* If we timed out waiting for Source_Capabilities, send a hard reset */
   if (evt & (uint32_t)Notifications::PDB_EVT_EVT_TIMEOUT) {
@@ -57,20 +59,24 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_cap() {
   }
   /* If we got reset signaling, transition to default */
   if (evt & (uint32_t)Notifications::PDB_EVT_PE_RESET) {
-    return PESinkWaitCap;
+    std::cout << "PDB_EVT_PE_RESET" << std::endl;
+    return PESinkSetupWaitCap;
   }
   /* If we're too hot, we shouldn't negotiate power yet */
   if (evt & (uint32_t)Notifications::PDB_EVT_PE_I_OVRTEMP) {
-    return PESinkWaitCap;
+    std::cout << "PDB_EVT_PE_I_OVRTEMP" << std::endl;
+    return PESinkSetupWaitCap;
   }
 
   /* If we got a message */
   if (evt & (uint32_t)Notifications::PDB_EVT_PE_MSG_RX) {
+    std::cout << "PDB_EVT_PE_MSG_RX" << std::endl;
     /* Get the message */
     while (rxMessageWaiting) {
       memcpy(&tempMessage, &rxMessage, sizeof(rxMessage));
       rxMessageWaiting = false;
       /* If we got a Source_Capabilities message, read it. */
+      std::cout << "Type" << PD_MSGTYPE_GET(&tempMessage) << std::endl;
       if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_SOURCE_CAPABILITIES && PD_NUMOBJ_GET(&tempMessage) > 0) {
         /* First, determine what PD revision we're using */
         if ((hdr_template & PD_HDR_SPECREV) == PD_SPECREV_1_0) {
@@ -87,11 +93,11 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_cap() {
         return PESinkEvalCap;
       }
     }
-    return PESinkWaitCap; // wait for more messages?
   }
 
   /* If we failed to get a message, wait longer */
-  return PESinkWaitCap;
+  std::cout << "NoMessages" << std::endl;
+  return PESinkSetupWaitCap;
 }
 
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_eval_cap() {
@@ -133,13 +139,13 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_eval_cap() {
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_select_cap_tx() {
 
   /* Transmit the request */
-  clearEvents((uint32_t)Notifications::PDB_EVT_PE_ALL); // clear all pending incase of an rx while prepping
+  clearEvents(); // clear all pending incase of an rx while prepping
 
   return pe_start_message_tx(policy_engine_state::PESinkSelectCap, PESinkHardReset, &_last_dpm_request);
 }
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_select_cap() {
   // Have transmitted the selected cap, transition to waiting for the response
-  clearEvents((uint32_t)Notifications::PDB_EVT_PE_ALL);
+  clearEvents();
   // wait for a response
   return waitForEvent(PESinkWaitCapResp, (uint32_t)Notifications::PDB_EVT_PE_MSG_RX | (uint32_t)Notifications::PDB_EVT_PE_RESET | (uint32_t)Notifications::PDB_EVT_EVT_TIMEOUT, PD_T_SENDER_RESPONSE);
 }
@@ -147,7 +153,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_select_cap() {
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_cap_resp() {
   /* Wait for a response */
   uint32_t evt = currentEvents;
-  clearEvents((uint32_t)Notifications::PDB_EVT_PE_MSG_RX | (uint32_t)Notifications::PDB_EVT_PE_RESET | (uint32_t)Notifications::PDB_EVT_EVT_TIMEOUT);
+  clearEvents();
   /* If we got reset signaling, transition to default */
   if (evt & (uint32_t)Notifications::PDB_EVT_PE_RESET) {
     return PESinkTransitionDefault;
@@ -171,7 +177,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_cap_resp() {
     } else if ((PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_REJECT || PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_WAIT) && PD_NUMOBJ_GET(&tempMessage) == 0) {
       /* If we don't have an explicit contract, wait for capabilities */
       if (!_explicit_contract) {
-        return PESinkWaitCap;
+        return PESinkSetupWaitCap;
         /* If we do have an explicit contract, go to the ready state */
       } else {
         return waitForEvent(PESinkReady, (uint32_t)Notifications::PDB_EVT_PE_ALL, 0xFFFFFFFF);
@@ -186,7 +192,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_cap_resp() {
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_transition_sink() {
   /* Wait for the PS_RDY message */
   uint32_t evt = currentEvents;
-  clearEvents(0xFFFFFFFF);
+  clearEvents();
   /* If we got reset signaling, transition to default */
   if (evt & (uint32_t)Notifications::PDB_EVT_PE_RESET) {
     return PESinkTransitionDefault;
@@ -212,7 +218,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_transition_sink() {
 
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_ready() {
   uint32_t evt = currentEvents;
-  clearEvents((uint32_t)Notifications::PDB_EVT_PE_ALL);
+  clearEvents();
   /* If SinkPPSPeriodicTimer ran out, send a new request */
   if (evt & (uint32_t)Notifications::PDB_EVT_PE_PPS_REQUEST) {
     return PESinkSelectCap;
@@ -361,7 +367,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_soft_reset() {
   /* Make an Accept message */
   accept.hdr = hdr_template | PD_MSGTYPE_ACCEPT | PD_NUMOBJ(0);
   /* Transmit the Accept */
-  return pe_start_message_tx(PESinkWaitCap, PESinkHardReset, &accept);
+  return pe_start_message_tx(PESinkSetupWaitCap, PESinkHardReset, &accept);
 }
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_send_soft_reset() {
   /* No need to explicitly reset the protocol layer here.  It resets itself
@@ -383,7 +389,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_send_soft_reset_resp() {
 
   /* Wait for a response */
   uint32_t evt = currentEvents;
-  clearEvents(0xFFFFFFFF);
+  clearEvents();
   /* If we got reset signaling, transition to default */
   if (evt & (uint32_t)Notifications::PDB_EVT_PE_RESET) {
     return PESinkTransitionDefault;
@@ -400,7 +406,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_send_soft_reset_resp() {
     /* If the source accepted our soft reset, wait for capabilities. */
     if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_ACCEPT && PD_NUMOBJ_GET(&tempMessage) == 0) {
 
-      return PESinkWaitCap;
+      return PESinkSetupWaitCap;
       /* If the message was a Soft_Reset, do the soft reset procedure */
     } else if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_SOFT_RESET && PD_NUMOBJ_GET(&tempMessage) == 0) {
 
@@ -453,8 +459,10 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_source_unresponsive() {
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_event() {
   // Check timeout
   if (getTimeStamp() > waitingEventsTimeout) {
+    std::cout << "Timeout ! " << getTimeStamp() << std::endl;
     notify(Notifications::PDB_EVT_EVT_TIMEOUT);
   }
+  std::cout << "Current events " << currentEvents << std::endl;
   if (currentEvents & waitingEventsMask) {
     return postNotifcationEvalState;
   }

@@ -50,8 +50,8 @@ public:
     hdr_template = PD_DATAROLE_UFP | PD_POWERROLE_SINK;
     _pps_index   = 0xFF;
   };
-  // Runs the internal thread. DOES NOT RETURN
-  void thread();
+  // Runs the internal thread, returns true if should re-run again immediately if possible
+  bool thread();
 
   // Returns true if headers indicate PD3.0 compliant
   bool isPD3_0();
@@ -74,7 +74,7 @@ public:
   bool pdHasNegotiated() {
     if (state == policy_engine_state::PESinkSourceUnresponsive)
       return false;
-    return true;
+    return state >= PESinkReady;
   }
   // Call this periodically, by the spec at least once every 10 seconds. <5 is reccomended
   void PPSTimerCallback();
@@ -82,6 +82,7 @@ public:
   bool NegotiationTimeoutReached(uint8_t timeout);
 
   bool IRQOccured();
+  void printStateName();
 
 private:
   const FUSB302                fusb;
@@ -110,6 +111,8 @@ private:
 
   uint8_t _tx_messageidcounter;
   typedef enum {
+    PEWaitingEvent,             // Meta state: waiting for event or timeout
+    PEWaitingMessageTx,         // Meta state: waiting for message tx to confirm
     PESinkStartup,              // Start of state machine
     PESinkDiscovery,            // no-op as source yells its features
     PESinkSetupWaitCap,         // Setup events wanted by waitCap
@@ -132,8 +135,6 @@ private:
     PESinkChunkReceived,        //
     PESinkNotSupportedReceived, //
     PESinkSourceUnresponsive,   //
-    PEWaitingEvent,             //
-    PEWaitingMessageTx,         //
   } policy_engine_state;
   enum class Notifications {
     PDB_EVT_PE_RESET          = EVENT_MASK(0),
@@ -159,7 +160,7 @@ private:
   uint32_t            waitingEventsMask    = 0;
   uint32_t            waitingEventsTimeout = 0;
   uint32_t            currentEvents;
-  void                clearEvents(uint32_t notification);
+  void                clearEvents(uint32_t notification = 0xFFFFFF);
   policy_engine_state waitForEvent(policy_engine_state evalState, uint32_t notification, uint32_t timeout);
 
   policy_engine_state pe_sink_startup();

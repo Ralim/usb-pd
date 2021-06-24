@@ -34,6 +34,10 @@ void PolicyEngine::readPendingMessage() {
         /* Pass the message to the policy engine. */
         handleMessage();
       }
+    } else {
+      // Invalid message or SOP', still discard tx message
+      /* Tell PolicyEngine to discard the message being transmitted */
+      notify(Notifications::PDB_EVT_TX_DISCARD);
     }
   }
 }

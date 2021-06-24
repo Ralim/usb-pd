@@ -107,14 +107,27 @@ uint8_t MockFUSB302::getRegister(const uint8_t reg) {
 }
 void MockFUSB302::addToFIFO(const uint8_t length, const uint8_t *data) {
   for (int i = 0; i < length; i++) {
-    fifoContent.push(data[i]);
+    addToFIFO(data[i]);
   }
 }
+void MockFUSB302::addToFIFO(const uint8_t data) {
+  fifoContent.push(data);
+  updateFiFoStatus();
+}
 
+void MockFUSB302::updateFiFoStatus() {
+  if (fifoContent.size()) {
+    setRegister(FUSB_STATUS1, getRegister(FUSB_STATUS1) & (~FUSB_STATUS1_RX_EMPTY));
+  } else {
+    setRegister(FUSB_STATUS1, getRegister(FUSB_STATUS1) | FUSB_STATUS1_RX_EMPTY);
+  }
+}
 bool MockFUSB302::readFiFo(const uint8_t length, uint8_t *buffer) {
   CHECK_TRUE(fifoContent.size() >= length);
   for (int i = 0; i < length; i++) {
     buffer[i] = fifoContent.front();
     fifoContent.pop();
   }
+  updateFiFoStatus();
+  return true;
 }

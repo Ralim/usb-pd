@@ -16,16 +16,44 @@
  */
 #include "policy_engine.h"
 #include "fusb302b.h"
+#include <iostream>
 #include <pd.h>
 #include <stdbool.h>
-
 void PolicyEngine::notify(PolicyEngine::Notifications notification) {
   uint32_t val = (uint32_t)notification;
   currentEvents |= val;
 }
+void PolicyEngine::printStateName() {
+  const char *names[] = {
+      "PEWaitingEvent",
+      "PEWaitingMessageTx",
+      "PESinkStartup",
+      "PESinkDiscovery",
+      "PESinkSetupWaitCap",
+      "PESinkWaitCap",
+      "PESinkEvalCap",
+      "PESinkSelectCapTx",
+      "PESinkSelectCap",
+      "PESinkWaitCapResp",
+      "PESinkTransitionSink",
+      "PESinkReady",
+      "PESinkGetSourceCap",
+      "PESinkGiveSinkCap",
+      "PESinkHardReset",
+      "PESinkTransitionDefault",
+      "PESinkSoftReset",
+      "PESinkSendSoftReset",
+      "PESinkSendSoftResetTxOK",
+      "PESinkSendSoftResetResp",
+      "PESinkSendNotSupported",
+      "PESinkChunkReceived",
+      "PESinkNotSupportedReceived",
+      "PESinkSourceUnresponsive",
+  };
 
-void PolicyEngine::thread() {
-
+  std::cout << "state " << state << " -> " << names[state] << std::endl;
+}
+bool PolicyEngine::thread() {
   switch (state) {
 
   case PESinkStartup:
@@ -104,11 +132,21 @@ void PolicyEngine::thread() {
     state = PESinkStartup;
     break;
   }
+  return state != PEWaitingEvent;
 }
 
 bool PolicyEngine::isPD3_0() { return (hdr_template & PD_HDR_SPECREV) == PD_SPECREV_3_0; }
 
-void PolicyEngine::handleMessage() { notify(PolicyEngine::Notifications::PDB_EVT_PE_MSG_RX); }
+void PolicyEngine::handleMessage() {
+  rxMessageWaiting = true;
+  notify(PolicyEngine::Notifications::PDB_EVT_PE_MSG_RX);
+}
+bool PolicyEngine::NegotiationTimeoutReached(uint8_t timeout) {
+  // Check if have been waiting longer than timeout without finishing
+  // If so force state into the failed state and return true
+  // TODO
+  return false;
+}
 
 void PolicyEngine::PPSTimerCallback() {
   if (PPSTimerEnabled && state == policy_engine_state::PESinkReady) {

@@ -17,6 +17,7 @@ public:
   void    setRegister(const uint8_t reg, const uint8_t value);
   uint8_t getRegister(const uint8_t reg);
   void    addToFIFO(const uint8_t length, const uint8_t *data);
+  void    addToFIFO(const uint8_t data);
   // Reset to defaults
   void reset();
   void resetFiFo();
@@ -24,6 +25,7 @@ public:
 
 private:
   bool validateRegister(const uint8_t reg);
+  void updateFiFoStatus();
   // Cached state of the internal regs
   uint8_t             mockRegs[0x43];
   std::queue<uint8_t> fifoContent;
