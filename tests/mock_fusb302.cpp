@@ -125,8 +125,6 @@ void MockFUSB302::updateFiFoStatus() {
   }
 }
 bool MockFUSB302::readFiFo(const uint8_t length, uint8_t *buffer) {
-  std::cout << "FiFo Read of len " << (int)length << "." << std::endl;
-
   CHECK_TRUE(fifoContent.size() >= length);
   for (int i = 0; i < length; i++) {
     buffer[i] = fifoContent.front();

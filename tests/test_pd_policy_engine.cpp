@@ -18,11 +18,45 @@ auto         mock_timestamp = []() -> uint32_t { return 0; };
 FUSB302      fusb           = FUSB302(FUSB302B_ADDR, i2c_read, i2c_write, mock_delay);
 PolicyEngine pe             = PolicyEngine(fusb, mock_timestamp, mock_delay, pdbs_dpm_get_sink_capability, pdbs_dpm_evaluate_capability);
 // Testing constants
-const uint8_t message_SOP1[]     = {FUSB_FIFO_RX_SOP1, 0, 0, 1, 2, 3, 4};
-const uint8_t message_good_crc[] = {FUSB_FIFO_RX_TOKEN_BITS, PD_MSGTYPE_GOODCRC, 0, 0, 0, 0, 0}; // good crc with transaction counter of 0
-const uint8_t message_accept[]   = {FUSB_FIFO_RX_SOP, 0x63, 0x03, 0, 0, 0, 0};                   // PS_ACCEPT
-
-const uint8_t message_ready[] = {FUSB_FIFO_RX_SOP, 0x66, 0x05, 0, 0, 0, 0}; // PS_READY with 0'ed CRC
+const uint8_t message_SOP1[]      = {FUSB_FIFO_RX_SOP1, 0, 0, 1, 2, 3, 4};
+const uint8_t message_good_crc[]  = {FUSB_FIFO_RX_TOKEN_BITS, PD_MSGTYPE_GOODCRC, 0, 0, 0, 0, 0}; // good crc with transaction counter of 0
+const uint8_t message_accept[]    = {FUSB_FIFO_RX_SOP, 0x63, 0x03, 0, 0, 0, 0};                   // PS_ACCEPT
+const uint8_t mock_capabilities[] = {FUSB_FIFO_RX_SOP,
+                                     0xA1, // Header
+                                     0x71, // Header
+                                     0x2c, // +
+                                     0x91, // | Fixed 5V @ 3A
+                                     0x01, // |
+                                     0x08, // +
+                                     0x2c, // +
+                                     0xD1, // |
+                                     0x02, // | Fixed 9V @ 3A
+                                     0x00, // +
+                                     0x2C, // +
+                                     0xB1, // |
+                                     0x04, // | Fixed 15V @ 3A
+                                     0x00, // +
+                                     0xE1, // +
+                                     0x40, // |
+                                     0x06, // | Fixed 20V @ 2.25A
+                                     0x00, // +
+                                     0x64, // +
+                                     0x21, // |
+                                     0xDC, // | PPS 3.3-11V @ 5A
+                                     0xC8, // +
+                                     0x3C, // +
+                                     0x21, // |
+                                     0x40, // | PPS 3.3-16V @ 3A
+                                     0xC9, // +
+                                     0x2D, // +
+                                     0x21, // |
+                                     0xA4, // | PPS 3.3-21V @ 2.25A
+                                     0xC9, // +
+                                     0,    // 0=CRC padding
+                                     0,
+                                     0,
+                                     0};
+const uint8_t message_ready[]     = {FUSB_FIFO_RX_SOP, 0x66, 0x05, 0, 0, 0, 0}; // PS_READY with 0'ed CRC
 // Testing helpers
 
 void injectTestmessage(const uint8_t len, const uint8_t *data) {
@@ -34,6 +68,22 @@ void injectTestmessage(const uint8_t len, const uint8_t *data) {
   CHECK_FALSE(fusb.fusb_rx_pending());
 }
 
+void iterateThoughExpectedStates(std::vector<int> expectedStates) {
+  // Run state machine through all states until it stops and assert it goes through the expected states
+  size_t iterationCounter = 0;
+  while (pe.thread()) {
+    CHECK_TRUE(iterationCounter < expectedStates.size());
+    CHECK_EQUAL(expectedStates[iterationCounter], pe.currentStateCode());
+    CHECK_TRUE(iterationCounter < 5);
+    pe.printStateName();
+    iterationCounter++;
+  }
+  pe.printStateName();
+  // Check that we are at the final expected state
+  CHECK_TRUE((iterationCounter + 1) == expectedStates.size());
+  CHECK_EQUAL(expectedStates[iterationCounter], pe.currentStateCode());
+}
+
 // Test Scenarios
 TEST(PD, PDNegotiationTest) {
   // Testing states
@@ -42,71 +92,18 @@ TEST(PD, PDNegotiationTest) {
   CHECK_FALSE(pe.pdHasNegotiated());
   // CHECK_FALSE(pe.setupCompleteOrTimedOut(100));
   // Crank the handle until we are waiting for a pd message to come in, but with deadlock detection
-  int iterationCounter = 0;
-  while (pe.thread()) {
-    iterationCounter++;
-    std::cout << "iteration Counter " << iterationCounter << std::endl;
-    CHECK_TRUE(iterationCounter < 5);
-  }
-  CHECK_TRUE(iterationCounter > 0);
+  iterateThoughExpectedStates({4, 5, 0});
   // Now the thread should wait for an IRQ to signify it needs to poll data from the FUSB302
   // First load up a SOP' message into the FIFO that it will need to ignore
   // messages are SOP,Header,Payload,CRC
   injectTestmessage(sizeof(message_SOP1), message_SOP1);
-  iterationCounter = 0;
-  while (pe.thread()) {
-    iterationCounter++;
-    std::cout << "Reading SOP' iteration Counter" << iterationCounter << std::endl;
-    CHECK_TRUE(iterationCounter < 5);
-  }
-  CHECK_TRUE(iterationCounter == 0); // no iterations as the notification will be ignored
+
+  iterateThoughExpectedStates({0});
   // Next queue an actual capabilities message
-  uint8_t mock_capabilities[] = {FUSB_FIFO_RX_SOP,
-                                 0xA1, // Header
-                                 0x71, // Header
-                                 0x2c, // +
-                                 0x91, // | Fixed 5V @ 3A
-                                 0x01, // |
-                                 0x08, // +
-                                 0x2c, // +
-                                 0xD1, // |
-                                 0x02, // | Fixed 9V @ 3A
-                                 0x00, // +
-                                 0x2C, // +
-                                 0xB1, // |
-                                 0x04, // | Fixed 15V @ 3A
-                                 0x00, // +
-                                 0xE1, // +
-                                 0x40, // |
-                                 0x06, // | Fixed 20V @ 2.25A
-                                 0x00, // +
-                                 0x64, // +
-                                 0x21, // |
-                                 0xDC, // | PPS 3.3-11V @ 5A
-                                 0xC8, // +
-                                 0x3C, // +
-                                 0x21, // |
-                                 0x40, // | PPS 3.3-16V @ 3A
-                                 0xC9, // +
-                                 0x2D, // +
-                                 0x21, // |
-                                 0xA4, // | PPS 3.3-21V @ 2.25A
-                                 0xC9, // +
-                                 0,    // 0=CRC padding
-                                 0,
-                                 0,
-                                 0};
 
   injectTestmessage(sizeof(mock_capabilities), mock_capabilities);
+  iterateThoughExpectedStates({6, 7, 8, 0});
 
-  iterationCounter = 0;
-  while (pe.thread()) {
-    pe.printStateName();
-    iterationCounter++;
-    // std::cout << "Reading SOP Capablities iteration Counter" << iterationCounter << std::endl;
-    CHECK_TRUE(iterationCounter < 10);
-  }
-  pe.printStateName();
   // We should now be able to pop the transmitted message out of the fifo
   const uint8_t expectedPD21VPPSMessage[] = {18, 18, 18, 19, 134, 130, 16, 45, 52, 8, 115, 255, 20, 254, 161};
   uint8_t       sendMessage[sizeof(expectedPD21VPPSMessage)];
@@ -119,54 +116,25 @@ TEST(PD, PDNegotiationTest) {
 
   fusb_mock.setRegister(FUSB_INTERRUPTA, FUSB_INTERRUPTA_I_TXSENT);
   pe.IRQOccured();
-  iterationCounter = 0;
-  while (pe.thread()) {
-    pe.printStateName();
-    iterationCounter++;
-    // std::cout << "Reading SOP Capablities iteration Counter" << iterationCounter << std::endl;
-    CHECK_TRUE(iterationCounter < 10);
-  }
-  pe.printStateName();
+  iterateThoughExpectedStates({1, 0});
   fusb_mock.setRegister(FUSB_INTERRUPTA, 0);
   // Now that tx has "sent" the charger will send a good crc back
   std::cout << "Faking Good CRC" << std::endl;
 
   injectTestmessage(sizeof(message_good_crc), message_good_crc);
 
-  iterationCounter = 0;
-  int states[]     = {2, 9};
-  while (pe.thread()) {
-    pe.printStateName();
-    CHECK_EQUAL(states[iterationCounter], pe.currentStateCode());
-    iterationCounter++;
-    // std::cout << "Reading SOP Capablities iteration Counter" << iterationCounter << std::endl;
-    CHECK_TRUE(iterationCounter < 10);
-  }
-  pe.printStateName();
+  iterateThoughExpectedStates({2, 9, 0});
   // Now the unit should be waiting for the acceptance message from the power adapter
   CHECK_EQUAL(0, pe.currentStateCode());
 
   // Now that it has sent a "good" request, respond in kind with an acceptance
 
   injectTestmessage(sizeof(message_accept), message_accept);
-  iterationCounter = 0;
-  while (pe.thread()) {
-    pe.printStateName();
-    iterationCounter++;
-    CHECK_TRUE(iterationCounter < 10);
-  }
-  pe.printStateName();
+  iterateThoughExpectedStates({10, 0});
   // Now send the PS_RDY
-
   injectTestmessage(sizeof(message_ready), message_ready);
-  iterationCounter = 0;
-  while (pe.thread()) {
-    pe.printStateName();
-    iterationCounter++;
-    CHECK_TRUE(iterationCounter < 10);
-  }
-  pe.printStateName();
-  // And _finally_ we are done
+  iterateThoughExpectedStates({11, 12, 0});
+  // And _finally_ we are done, the unit is now in the ready state
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

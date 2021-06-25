@@ -113,31 +113,31 @@ private:
 
   uint8_t _tx_messageidcounter;
   typedef enum {
-    PEWaitingEvent,             // Meta state: waiting for event or timeout
-    PEWaitingMessageTx,         // Meta state: waiting for message tx to confirm
-    PEWaitingMessageGoodCRC,    // We have sent a message, waiting for a GoodCRC to come back
-    PESinkStartup,              // Start of state machine
-    PESinkDiscovery,            // no-op as source yells its features
-    PESinkSetupWaitCap,         // Setup events wanted by waitCap
-    PESinkWaitCap,              // Waiting for source
-    PESinkEvalCap,              //
-    PESinkSelectCapTx,          // Send cap selected
-    PESinkSelectCap,            // Wait send ok
-    PESinkWaitCapResp,          // Wait response message
-    PESinkTransitionSink,       //
-    PESinkReady,                //
-    PESinkGetSourceCap,         //
-    PESinkGiveSinkCap,          //
-    PESinkHardReset,            //
-    PESinkTransitionDefault,    //
-    PESinkSoftReset,            //
-    PESinkSendSoftReset,        //
-    PESinkSendSoftResetTxOK,    //
-    PESinkSendSoftResetResp,    //
-    PESinkSendNotSupported,     //
-    PESinkChunkReceived,        //
-    PESinkNotSupportedReceived, //
-    PESinkSourceUnresponsive,   //
+    PEWaitingEvent             = 0,  // Meta state: waiting for event or timeout
+    PEWaitingMessageTx         = 1,  // Meta state: waiting for message tx to confirm
+    PEWaitingMessageGoodCRC    = 2,  // We have sent a message, waiting for a GoodCRC to come back
+    PESinkStartup              = 3,  // Start of state machine
+    PESinkDiscovery            = 4,  // no-op as source yells its features
+    PESinkSetupWaitCap         = 5,  // Setup events wanted by waitCap
+    PESinkWaitCap              = 6,  // Waiting for source
+    PESinkEvalCap              = 7,  // Evaluating the source provided capabilities message
+    PESinkSelectCapTx          = 8,  // Send cap selected
+    PESinkSelectCap            = 9,  // Wait send ok
+    PESinkWaitCapResp          = 10, // Wait response message
+    PESinkTransitionSink       = 11, // Transition to sink mode
+    PESinkReady                = 12, // Normal operational state, all is good
+    PESinkGetSourceCap         = 13, //
+    PESinkGiveSinkCap          = 14, //
+    PESinkHardReset            = 15, //
+    PESinkTransitionDefault    = 16, //
+    PESinkSoftReset            = 17, //
+    PESinkSendSoftReset        = 18, //
+    PESinkSendSoftResetTxOK    = 19, //
+    PESinkSendSoftResetResp    = 20, //
+    PESinkSendNotSupported     = 21, //
+    PESinkChunkReceived        = 22, //
+    PESinkNotSupportedReceived = 23, //
+    PESinkSourceUnresponsive   = 24, //
   } policy_engine_state;
   enum class Notifications {
     PDB_EVT_PE_RESET          = EVENT_MASK(0),
