@@ -83,6 +83,8 @@ public:
 
   bool IRQOccured();
   void printStateName();
+  // Useful for debug reading out
+  int currentStateCode() { return (int)state; }
 
 private:
   const FUSB302                fusb;

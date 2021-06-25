@@ -47,7 +47,7 @@ uint8_t FUSB302::fusb_read_message(pd_msg *msg) const {
   // Read the header. If its not a SOP we dont actually want it at all
   // But on some revisions of the fusb if you dont both pick them up and read
   // them out of the fifo, it gets stuck
-  // TODO this might need a tad more testing about how many bites we throw out
+  // TODO this might need a tad more testing about how many bites we throw out, but believe it is correct
   uint8_t returnValue = 0;
   if ((fusb_read_byte(FUSB_FIFOS) & FUSB_FIFO_RX_TOKEN_BITS) != FUSB_FIFO_RX_SOP) {
     returnValue = 1;

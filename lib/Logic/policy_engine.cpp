@@ -20,6 +20,7 @@
 #include <pd.h>
 #include <stdbool.h>
 void PolicyEngine::notify(PolicyEngine::Notifications notification) {
+  std::cout << "Notification of " << (int)notification << std::endl;
   uint32_t val = (uint32_t)notification;
   currentEvents |= val;
 }
@@ -27,6 +28,7 @@ void PolicyEngine::printStateName() {
   const char *names[] = {
       "PEWaitingEvent",
       "PEWaitingMessageTx",
+      "PEWaitingMessageGoodCRC",
       "PESinkStartup",
       "PESinkDiscovery",
       "PESinkSetupWaitCap",
@@ -128,7 +130,11 @@ bool PolicyEngine::thread() {
   case PEWaitingMessageTx:
     state = pe_sink_wait_send_done();
     break;
+  case PEWaitingMessageGoodCRC:
+    state = pe_sink_wait_good_crc();
+    break;
   default:
+    std::cout << "Warning unhandled state" << std::endl;
     state = PESinkStartup;
     break;
   }

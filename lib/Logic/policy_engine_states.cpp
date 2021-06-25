@@ -208,7 +208,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_transition_sink() {
       _explicit_contract = true;
 
       /* Negotiation finished */
-      return waitForEvent(PESinkReady, (uint32_t)Notifications::PDB_EVT_PE_ALL, 0xFFFFFFFF);
+      return PESinkReady;
       /* If there was a protocol error, send a hard reset */
     }
   }
@@ -462,7 +462,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_event() {
     std::cout << "Timeout ! " << getTimeStamp() << std::endl;
     notify(Notifications::PDB_EVT_EVT_TIMEOUT);
   }
-  std::cout << "Current events " << currentEvents << std::endl;
+  std::cout << "Current events " << currentEvents << " Wanted " << waitingEventsMask << std::endl;
   if (currentEvents & waitingEventsMask) {
     return postNotifcationEvalState;
   }
@@ -480,7 +480,8 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_good_crc() {
     pd_msg goodcrc;
 
     /* Read the GoodCRC */
-    fusb.fusb_read_message(&goodcrc);
+    memcpy(&goodcrc, &rxMessage, sizeof(rxMessage));
+    rxMessageWaiting = false;
 
     /* Check that the message is correct */
     if (PD_MSGTYPE_GET(&goodcrc) == PD_MSGTYPE_GOODCRC && PD_NUMOBJ_GET(&goodcrc) == 0 && PD_MESSAGEID_GET(&goodcrc) == _tx_messageidcounter) {
@@ -490,6 +491,10 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_good_crc() {
       notify(Notifications::PDB_EVT_PE_TX_DONE);
       return postSendState;
     } else {
+      std::cout << PD_MSGTYPE_GET(&goodcrc) << std::endl;
+      std::cout << PD_NUMOBJ_GET(&goodcrc) << std::endl;
+      std::cout << PD_MESSAGEID_GET(&goodcrc) << std::endl;
+      std::cout << (int)_tx_messageidcounter << std::endl;
       notify(Notifications::PDB_EVT_PE_TX_ERR);
       return postSendFailedState;
     }
@@ -516,6 +521,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_send_done() {
   /* If the message was sent successfully */
   if ((uint32_t)evt & (uint32_t)Notifications::PDB_EVT_TX_I_TXSENT) {
 
+    clearEvents();
     if (rxMessageWaiting) {
       return pe_sink_wait_good_crc();
     } else {

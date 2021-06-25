@@ -118,26 +118,67 @@ TEST(PD, PDNegotiationTest) {
     CHECK_TRUE(iterationCounter < 10);
   }
   pe.printStateName();
+  fusb_mock.setRegister(FUSB_INTERRUPTA, 0);
   // Now that tx has "sent" the charger will send a good crc back
-  // TODO
+  std::cout << "Faking Good CRC" << std::endl;
+  pd_msg good_crc = {0, 0, 0, 0, 0, 0};
+  good_crc.hdr    = PD_MSGTYPE_GOODCRC << PD_HDR_MSGTYPE_SHIFT;
+  good_crc.hdr |= 0 << PD_HDR_MESSAGEID_SHIFT;
+  fusb_mock.addToFIFO(FUSB_FIFO_RX_TOKEN_BITS);
+  fusb_mock.addToFIFO(2 + 4, good_crc.bytes);
 
-  // // Now that it has sent a "good" request, respond in kind with an acceptance
-  // const uint8_t accept_message[] = {FUSB_FIFO_RX_SOP1, 0x63, 0x03, 0, 0, 0, 0}; // PS_ACCEPT with 0'ed CRC
-  // fusb_mock.addToFIFO(sizeof(accept_message), accept_message);
+  fusb_mock.setRegister(FUSB_INTERRUPTB, FUSB_INTERRUPTB_I_GCRCSENT);
+  CHECK_TRUE(fusb.fusb_rx_pending());
+  pe.IRQOccured();
+  CHECK_FALSE(fusb.fusb_rx_pending());
+  fusb_mock.setRegister(FUSB_INTERRUPTB, 0);
+  iterationCounter = 0;
+  int states[]     = {2, 9};
+  while (pe.thread()) {
+    pe.printStateName();
+    CHECK_EQUAL(states[iterationCounter], pe.currentStateCode());
+    iterationCounter++;
+    // std::cout << "Reading SOP Capablities iteration Counter" << iterationCounter << std::endl;
+    CHECK_TRUE(iterationCounter < 10);
+  }
+  pe.printStateName();
+  // Now the unit should be waiting for the acceptance message from the power adapter
+  CHECK_EQUAL(0, pe.currentStateCode());
 
-  // fusb_mock.setRegister(FUSB_INTERRUPTB, FUSB_INTERRUPTB_I_GCRCSENT);
-  // CHECK_TRUE(fusb.fusb_rx_pending());
-  // pe.IRQOccured();
-  // CHECK_FALSE(fusb.fusb_rx_pending());
-  // fusb_mock.setRegister(FUSB_INTERRUPTB, 0);
-  // iterationCounter = 0;
-  // while (pe.thread()) {
-  //   pe.printStateName();
-  //   iterationCounter++;
-  //   // std::cout << "Reading SOP Capablities iteration Counter" << iterationCounter << std::endl;
-  //   CHECK_TRUE(iterationCounter < 10);
-  // }
-  // pe.printStateName();
+  // Now that it has sent a "good" request, respond in kind with an acceptance
+  const uint8_t accept_message[] = {FUSB_FIFO_RX_SOP, 0x63, 0x03, 0, 0, 0, 0}; // PS_ACCEPT with 0'ed CRC
+  fusb_mock.addToFIFO(sizeof(accept_message), accept_message);
+
+  fusb_mock.setRegister(FUSB_INTERRUPTB, FUSB_INTERRUPTB_I_GCRCSENT);
+  CHECK_TRUE(fusb.fusb_rx_pending());
+  pe.IRQOccured();
+  CHECK_FALSE(fusb.fusb_rx_pending());
+  fusb_mock.setRegister(FUSB_INTERRUPTB, 0);
+  iterationCounter = 0;
+  while (pe.thread()) {
+    pe.printStateName();
+    iterationCounter++;
+    CHECK_TRUE(iterationCounter < 10);
+  }
+  pe.printStateName();
+  // Now send the PS_RDY
+
+  const uint8_t ready_message[] = {FUSB_FIFO_RX_SOP, 0x66, 0x05, 0, 0, 0, 0}; // PS_READY with 0'ed CRC
+  fusb_mock.addToFIFO(sizeof(ready_message), ready_message);
+
+  fusb_mock.setRegister(FUSB_INTERRUPTB, FUSB_INTERRUPTB_I_GCRCSENT);
+  CHECK_TRUE(fusb.fusb_rx_pending());
+  pe.IRQOccured();
+  CHECK_FALSE(fusb.fusb_rx_pending());
+  fusb_mock.setRegister(FUSB_INTERRUPTB, 0);
+  iterationCounter = 0;
+  while (pe.thread()) {
+    pe.printStateName();
+    iterationCounter++;
+    CHECK_TRUE(iterationCounter < 10);
+  }
+  pe.printStateName();
+  // And _finally_ we are done
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
