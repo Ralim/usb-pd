@@ -10,15 +10,33 @@ TEST_GROUP(PD){};
 bool        pdbs_dpm_evaluate_capability(const pd_msg *capabilities, pd_msg *request);
 void        pdbs_dpm_get_sink_capability(pd_msg *cap, const int8_t pdo_index, const bool isPD3);
 MockFUSB302 fusb_mock = MockFUSB302();
+// remap's for usin the Mock
+bool         i2c_read(const uint8_t deviceAddress, const uint8_t address, const uint8_t size, uint8_t *buf) { return fusb_mock.i2cRead(deviceAddress, address, size, buf); }
+bool         i2c_write(const uint8_t deviceAddress, const uint8_t address, const uint8_t size, uint8_t *buf) { return fusb_mock.i2cWrite(deviceAddress, address, size, buf); }
+auto         mock_delay     = [](uint32_t millis) {};
+auto         mock_timestamp = []() -> uint32_t { return 0; };
+FUSB302      fusb           = FUSB302(FUSB302B_ADDR, i2c_read, i2c_write, mock_delay);
+PolicyEngine pe             = PolicyEngine(fusb, mock_timestamp, mock_delay, pdbs_dpm_get_sink_capability, pdbs_dpm_evaluate_capability);
+// Testing constants
+const uint8_t message_SOP1[]     = {FUSB_FIFO_RX_SOP1, 0, 0, 1, 2, 3, 4};
+const uint8_t message_good_crc[] = {FUSB_FIFO_RX_TOKEN_BITS, PD_MSGTYPE_GOODCRC, 0, 0, 0, 0, 0}; // good crc with transaction counter of 0
+const uint8_t message_accept[]   = {FUSB_FIFO_RX_SOP, 0x63, 0x03, 0, 0, 0, 0};                   // PS_ACCEPT
 
-bool i2c_read(const uint8_t deviceAddress, const uint8_t address, const uint8_t size, uint8_t *buf) { return fusb_mock.i2cRead(deviceAddress, address, size, buf); }
-bool i2c_write(const uint8_t deviceAddress, const uint8_t address, const uint8_t size, uint8_t *buf) { return fusb_mock.i2cWrite(deviceAddress, address, size, buf); }
+const uint8_t message_ready[] = {FUSB_FIFO_RX_SOP, 0x66, 0x05, 0, 0, 0, 0}; // PS_READY with 0'ed CRC
+// Testing helpers
+
+void injectTestmessage(const uint8_t len, const uint8_t *data) {
+
+  fusb_mock.addToFIFO(len, data);
+  fusb_mock.setRegister(FUSB_INTERRUPTB, FUSB_INTERRUPTB_I_GCRCSENT);
+  CHECK_TRUE(fusb.fusb_rx_pending());
+  pe.IRQOccured();
+  CHECK_FALSE(fusb.fusb_rx_pending());
+}
+
+// Test Scenarios
 TEST(PD, PDNegotiationTest) {
   // Testing states
-  auto         mock_delay     = [](uint32_t millis) {};
-  auto         mock_timestamp = []() -> uint32_t { return 0; };
-  FUSB302      fusb           = FUSB302(FUSB302B_ADDR, i2c_read, i2c_write, mock_delay);
-  PolicyEngine pe             = PolicyEngine(fusb, mock_timestamp, mock_delay, pdbs_dpm_get_sink_capability, pdbs_dpm_evaluate_capability);
   CHECK_FALSE(pe.isPD3_0());
   CHECK_FALSE(pe.NegotiationTimeoutReached(100));
   CHECK_FALSE(pe.pdHasNegotiated());
@@ -34,12 +52,7 @@ TEST(PD, PDNegotiationTest) {
   // Now the thread should wait for an IRQ to signify it needs to poll data from the FUSB302
   // First load up a SOP' message into the FIFO that it will need to ignore
   // messages are SOP,Header,Payload,CRC
-  uint8_t mockSOP1[] = {FUSB_FIFO_RX_SOP1, 0, 0, 1, 2, 3, 4};
-  fusb_mock.addToFIFO(sizeof(mockSOP1), mockSOP1);
-  fusb_mock.setRegister(FUSB_INTERRUPTB, FUSB_INTERRUPTB_I_GCRCSENT);
-  CHECK_TRUE(fusb.fusb_rx_pending());
-  pe.IRQOccured();
-  CHECK_FALSE(fusb.fusb_rx_pending());
+  injectTestmessage(sizeof(message_SOP1), message_SOP1);
   iterationCounter = 0;
   while (pe.thread()) {
     iterationCounter++;
@@ -83,13 +96,9 @@ TEST(PD, PDNegotiationTest) {
                                  0,
                                  0,
                                  0};
-  fusb_mock.addToFIFO(sizeof(mock_capabilities), mock_capabilities);
 
-  fusb_mock.setRegister(FUSB_INTERRUPTB, FUSB_INTERRUPTB_I_GCRCSENT);
-  CHECK_TRUE(fusb.fusb_rx_pending());
-  pe.IRQOccured();
-  CHECK_FALSE(fusb.fusb_rx_pending());
-  fusb_mock.setRegister(FUSB_INTERRUPTB, 0);
+  injectTestmessage(sizeof(mock_capabilities), mock_capabilities);
+
   iterationCounter = 0;
   while (pe.thread()) {
     pe.printStateName();
@@ -121,17 +130,9 @@ TEST(PD, PDNegotiationTest) {
   fusb_mock.setRegister(FUSB_INTERRUPTA, 0);
   // Now that tx has "sent" the charger will send a good crc back
   std::cout << "Faking Good CRC" << std::endl;
-  pd_msg good_crc = {0, 0, 0, 0, 0, 0};
-  good_crc.hdr    = PD_MSGTYPE_GOODCRC << PD_HDR_MSGTYPE_SHIFT;
-  good_crc.hdr |= 0 << PD_HDR_MESSAGEID_SHIFT;
-  fusb_mock.addToFIFO(FUSB_FIFO_RX_TOKEN_BITS);
-  fusb_mock.addToFIFO(2 + 4, good_crc.bytes);
 
-  fusb_mock.setRegister(FUSB_INTERRUPTB, FUSB_INTERRUPTB_I_GCRCSENT);
-  CHECK_TRUE(fusb.fusb_rx_pending());
-  pe.IRQOccured();
-  CHECK_FALSE(fusb.fusb_rx_pending());
-  fusb_mock.setRegister(FUSB_INTERRUPTB, 0);
+  injectTestmessage(sizeof(message_good_crc), message_good_crc);
+
   iterationCounter = 0;
   int states[]     = {2, 9};
   while (pe.thread()) {
@@ -146,14 +147,8 @@ TEST(PD, PDNegotiationTest) {
   CHECK_EQUAL(0, pe.currentStateCode());
 
   // Now that it has sent a "good" request, respond in kind with an acceptance
-  const uint8_t accept_message[] = {FUSB_FIFO_RX_SOP, 0x63, 0x03, 0, 0, 0, 0}; // PS_ACCEPT with 0'ed CRC
-  fusb_mock.addToFIFO(sizeof(accept_message), accept_message);
 
-  fusb_mock.setRegister(FUSB_INTERRUPTB, FUSB_INTERRUPTB_I_GCRCSENT);
-  CHECK_TRUE(fusb.fusb_rx_pending());
-  pe.IRQOccured();
-  CHECK_FALSE(fusb.fusb_rx_pending());
-  fusb_mock.setRegister(FUSB_INTERRUPTB, 0);
+  injectTestmessage(sizeof(message_accept), message_accept);
   iterationCounter = 0;
   while (pe.thread()) {
     pe.printStateName();
@@ -163,14 +158,7 @@ TEST(PD, PDNegotiationTest) {
   pe.printStateName();
   // Now send the PS_RDY
 
-  const uint8_t ready_message[] = {FUSB_FIFO_RX_SOP, 0x66, 0x05, 0, 0, 0, 0}; // PS_READY with 0'ed CRC
-  fusb_mock.addToFIFO(sizeof(ready_message), ready_message);
-
-  fusb_mock.setRegister(FUSB_INTERRUPTB, FUSB_INTERRUPTB_I_GCRCSENT);
-  CHECK_TRUE(fusb.fusb_rx_pending());
-  pe.IRQOccured();
-  CHECK_FALSE(fusb.fusb_rx_pending());
-  fusb_mock.setRegister(FUSB_INTERRUPTB, 0);
+  injectTestmessage(sizeof(message_ready), message_ready);
   iterationCounter = 0;
   while (pe.thread()) {
     pe.printStateName();
