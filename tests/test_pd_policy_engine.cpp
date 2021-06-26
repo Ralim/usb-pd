@@ -18,6 +18,7 @@ FUSB302      fusb           = FUSB302(FUSB302B_ADDR, i2c_read, i2c_write, mock_d
 PolicyEngine pe             = PolicyEngine(fusb, mock_timestamp, mock_delay, pdbs_dpm_get_sink_capability, pdbs_dpm_evaluate_capability);
 // Testing constants
 const uint8_t message_SOP1[]      = {FUSB_FIFO_RX_SOP1, 0, 0, 1, 2, 3, 4};
+const uint8_t message_SOP2[]      = {FUSB_FIFO_RX_SOP2, 0, 0, 1, 2, 3, 4};
 const uint8_t message_good_crc[]  = {FUSB_FIFO_RX_TOKEN_BITS, PD_MSGTYPE_GOODCRC, 0, 0, 0, 0, 0}; // good crc with transaction counter of 0
 const uint8_t message_accept[]    = {FUSB_FIFO_RX_SOP, 0x63, 0x03, 0, 0, 0, 0};                   // PS_ACCEPT
 const uint8_t mock_capabilities[] = {FUSB_FIFO_RX_SOP,
@@ -94,10 +95,13 @@ TEST(PD, PDNegotiationTest) {
   iterateThoughExpectedStates({4, 5, 0});
   // Now the thread should wait for an IRQ to signify it needs to poll data from the FUSB302
   // First load up a SOP' message into the FIFO that it will need to ignore
-  // messages are SOP,Header,Payload,CRC
   injectTestmessage(sizeof(message_SOP1), message_SOP1);
+  iterateThoughExpectedStates({0});
+  // Also test SOP" are ignored
+  injectTestmessage(sizeof(message_SOP2), message_SOP2);
 
   iterateThoughExpectedStates({0});
+
   // Next queue an actual capabilities message
 
   injectTestmessage(sizeof(mock_capabilities), mock_capabilities);
