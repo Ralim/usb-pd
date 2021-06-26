@@ -252,10 +252,10 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_ready() {
       rxMessageWaiting = false;
       /* Ignore vendor-defined messages */
       if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_VENDOR_DEFINED && PD_NUMOBJ_GET(&tempMessage) > 0) {
-        return waitForEvent(PESinkReady, (uint32_t)Notifications::ALL, 0xFFFFFFFF);
+        return waitForEvent(PESinkReady, (uint32_t)Notifications::ALL);
         /* Ignore Ping messages */
       } else if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_PING && PD_NUMOBJ_GET(&tempMessage) == 0) {
-        return waitForEvent(PESinkReady, (uint32_t)Notifications::ALL, 0xFFFFFFFF);
+        return waitForEvent(PESinkReady, (uint32_t)Notifications::ALL);
         /* DR_Swap messages are not supported */
       } else if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_DR_SWAP && PD_NUMOBJ_GET(&tempMessage) == 0) {
         return PESinkSendNotSupported;
@@ -325,10 +325,6 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_give_sink_cap() {
   pd_msg *snk_cap = &tempMessage;
   /* Get our capabilities from the DPM */
   pdbs_dpm_get_sink_capability(snk_cap, ((hdr_template & PD_HDR_SPECREV) >= PD_SPECREV_3_0));
-  /* Set the unconstrained power flag. */
-  if (_unconstrained_power) {
-    snk_cap->obj[0] |= PD_PDO_SNK_FIXED_UNCONSTRAINED;
-  }
   /* Transmit our capabilities */
   return pe_start_message_tx(PESinkReady, PESinkHardReset, snk_cap);
 }

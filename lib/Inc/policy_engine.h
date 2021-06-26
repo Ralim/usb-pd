@@ -164,7 +164,7 @@ private:
   uint32_t            waitingEventsTimeout = 0;
   uint32_t            currentEvents;
   void                clearEvents(uint32_t notification = 0xFFFFFF);
-  policy_engine_state waitForEvent(policy_engine_state evalState, uint32_t notification, uint32_t timeout);
+  policy_engine_state waitForEvent(policy_engine_state evalState, uint32_t notification, uint32_t timeout = 0xFFFFFFFF);
 
   policy_engine_state pe_sink_startup();
   policy_engine_state pe_sink_discovery();

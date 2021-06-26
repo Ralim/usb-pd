@@ -109,6 +109,8 @@ void pdbs_dpm_get_sink_capability(pd_msg *cap, const bool isPD3) {
   }
   /* Set the USB communications capable flag. */
   cap->obj[0] |= PD_PDO_SNK_FIXED_USB_COMMS;
+  // if this device is unconstrained, set the flag
+  cap->obj[0] |= PD_PDO_SNK_FIXED_UNCONSTRAINED;
 
   /* Set the Sink_Capabilities message header */
   cap->hdr = PD_MSGTYPE_SINK_CAPABILITIES | PD_NUMOBJ(numobj);
