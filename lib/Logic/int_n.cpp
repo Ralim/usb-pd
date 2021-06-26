@@ -16,23 +16,24 @@
  */
 
 #include "policy_engine.h"
+#include <iostream>
 #include <pd.h>
 #include <string.h>
-
 void PolicyEngine::readPendingMessage() {
   while (fusb.fusb_rx_pending()) {
     /* Read the message */
-    if (fusb.fusb_read_message(&rxMessage) == 0) {
+    if (fusb.fusb_read_message(&irqMessage) == 0) {
       /* If it's a Soft_Reset, go to the soft reset state */
-      if (PD_MSGTYPE_GET(&rxMessage) == PD_MSGTYPE_SOFT_RESET && PD_NUMOBJ_GET(&rxMessage) == 0) {
-        /* TX transitions to its reset state */
+      if (PD_MSGTYPE_GET(&irqMessage) == PD_MSGTYPE_SOFT_RESET && PD_NUMOBJ_GET(&irqMessage) == 0) {
+        /* PE transitions to its reset state */
         notify(Notifications::RESET);
       } else {
         /* Tell PolicyEngine to discard the message being transmitted */
         notify(Notifications::DISCARD);
-
         /* Pass the message to the policy engine. */
-        handleMessage();
+        incomingMessages.push(&irqMessage);
+
+        notify(PolicyEngine::Notifications::MSG_RX);
       }
     } else {
       // Invalid message or SOP', still discard tx message
