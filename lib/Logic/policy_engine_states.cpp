@@ -53,15 +53,6 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_cap() {
   uint32_t evt = currentEvents;
   clearEvents();
 
-  /* If we timed out waiting for Source_Capabilities, send a hard reset */
-  if (evt & (uint32_t)Notifications::TIMEOUT) {
-    return PESinkHardReset;
-  }
-  /* If we got reset signaling, transition to default */
-  if (evt & (uint32_t)Notifications::RESET) {
-    std::cout << "RESET" << std::endl;
-    return PESinkSetupWaitCap;
-  }
   /* If we're too hot, we shouldn't negotiate power yet */
   if (evt & (uint32_t)Notifications::I_OVRTEMP) {
     std::cout << "I_OVRTEMP" << std::endl;
@@ -154,14 +145,6 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_cap_resp() {
   /* Wait for a response */
   uint32_t evt = currentEvents;
   clearEvents();
-  /* If we got reset signaling, transition to default */
-  if (evt & (uint32_t)Notifications::RESET) {
-    return PESinkTransitionDefault;
-  }
-  /* If we didn't get a response before the timeout, send a hard reset */
-  if (evt == (uint32_t)Notifications::TIMEOUT) {
-    return PESinkSoftReset;
-  }
 
   /* Get the response message */
   if (rxMessageWaiting) {
@@ -193,11 +176,6 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_transition_sink() {
   /* Wait for the PS_RDY message */
   uint32_t evt = currentEvents;
   clearEvents();
-  /* If we got reset signaling, transition to default */
-  if (evt & (uint32_t)Notifications::RESET) {
-    return PESinkTransitionDefault;
-  }
-
   /* If we received a message, read it */
   while (rxMessageWaiting) {
     memcpy(&tempMessage, &rxMessage, sizeof(rxMessage));
@@ -222,10 +200,6 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_ready() {
   /* If SinkPPSPeriodicTimer ran out, send a new request */
   if (evt & (uint32_t)Notifications::PPS_REQUEST) {
     return PESinkSelectCap;
-  }
-  /* If we got reset signaling, transition to default */
-  if (evt & (uint32_t)Notifications::RESET) {
-    return PESinkTransitionDefault;
   }
 
   /* If we overheated, send a hard reset */
@@ -385,14 +359,6 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_send_soft_reset_resp() {
   /* Wait for a response */
   uint32_t evt = currentEvents;
   clearEvents();
-  /* If we got reset signaling, transition to default */
-  if (evt & (uint32_t)Notifications::RESET) {
-    return PESinkTransitionDefault;
-  }
-  /* If we didn't get a response before the timeout, send a hard reset */
-  if (evt == (uint32_t)Notifications::TIMEOUT) {
-    return PESinkHardReset;
-  }
 
   /* Get the response message */
   if (rxMessageWaiting) {
@@ -457,6 +423,13 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_event() {
     std::cout << "Timeout ! " << getTimeStamp() << std::endl;
     notify(Notifications::TIMEOUT);
   }
+  if (currentEvents & (uint32_t)Notifications::TIMEOUT) {
+    return PESinkSoftReset;
+  }
+  if (currentEvents & (uint32_t)Notifications::RESET) {
+    return PESinkTransitionDefault;
+  }
+
   std::cout << "Current events " << currentEvents << " Wanted " << waitingEventsMask << std::endl;
   if (currentEvents & waitingEventsMask) {
     return postNotifcationEvalState;
@@ -465,11 +438,8 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_event() {
 }
 
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_good_crc() {
-  uint32_t evt = currentEvents;
   clearEvents();
-  if ((evt & (uint32_t)Notifications::TIMEOUT) || (evt & (uint32_t)Notifications::RESET)) {
-    return PESinkTransitionDefault;
-  }
+
   if (rxMessageWaiting) {
     // Wait for the Good CRC
     pd_msg goodcrc;
@@ -486,10 +456,6 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_good_crc() {
       notify(Notifications::TX_DONE);
       return postSendState;
     } else {
-      std::cout << PD_MSGTYPE_GET(&goodcrc) << std::endl;
-      std::cout << PD_NUMOBJ_GET(&goodcrc) << std::endl;
-      std::cout << PD_MESSAGEID_GET(&goodcrc) << std::endl;
-      std::cout << (int)_tx_messageidcounter << std::endl;
       notify(Notifications::TX_ERR);
       return postSendFailedState;
     }
@@ -502,9 +468,6 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_send_done() {
   /* Waiting for response*/
   uint32_t evt = currentEvents;
   clearEvents();
-  if ((evt & (uint32_t)Notifications::TIMEOUT) || (evt & (uint32_t)Notifications::RESET)) {
-    return PESinkTransitionDefault;
-  }
 
   if ((uint32_t)evt & (uint32_t)Notifications::DISCARD) {
     // increment the counter

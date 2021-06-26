@@ -17,11 +17,12 @@ auto         mock_timestamp = []() -> uint32_t { return 0; };
 FUSB302      fusb           = FUSB302(FUSB302B_ADDR, i2c_read, i2c_write, mock_delay);
 PolicyEngine pe             = PolicyEngine(fusb, mock_timestamp, mock_delay, pdbs_dpm_get_sink_capability, pdbs_dpm_evaluate_capability);
 // Testing constants
-const uint8_t message_SOP1[]      = {FUSB_FIFO_RX_SOP1, 0, 0, 1, 2, 3, 4};
-const uint8_t message_SOP2[]      = {FUSB_FIFO_RX_SOP2, 0, 0, 1, 2, 3, 4};
-const uint8_t message_good_crc[]  = {FUSB_FIFO_RX_TOKEN_BITS, PD_MSGTYPE_GOODCRC, 0, 0, 0, 0, 0}; // good crc with transaction counter of 0
-const uint8_t message_accept[]    = {FUSB_FIFO_RX_SOP, 0x63, 0x03, 0, 0, 0, 0};                   // PS_ACCEPT
-const uint8_t mock_capabilities[] = {FUSB_FIFO_RX_SOP,
+const uint8_t message_SOP1[]                 = {FUSB_FIFO_RX_SOP1, 0, 0, 1, 2, 3, 4};
+const uint8_t message_SOP2[]                 = {FUSB_FIFO_RX_SOP2, 0, 0, 1, 2, 3, 4};
+const uint8_t message_good_crc[]             = {FUSB_FIFO_RX_SOP, PD_MSGTYPE_GOODCRC, 0, 0, 0, 0, 0}; // good crc with transaction counter of 0
+const uint8_t message_request_capabilities[] = {FUSB_FIFO_RX_SOP, PD_MSGTYPE_GET_SINK_CAP, 0, 0, 0, 0, 0};
+const uint8_t message_accept[]               = {FUSB_FIFO_RX_SOP, 0x63, 0x03, 0, 0, 0, 0}; // PS_ACCEPT
+const uint8_t mock_capabilities[]            = {FUSB_FIFO_RX_SOP,
                                      0xA1, // Header
                                      0x71, // Header
                                      0x2c, // +
@@ -56,7 +57,7 @@ const uint8_t mock_capabilities[] = {FUSB_FIFO_RX_SOP,
                                      0,
                                      0,
                                      0};
-const uint8_t message_ready[]     = {FUSB_FIFO_RX_SOP, 0x66, 0x05, 0, 0, 0, 0}; // PS_READY with 0'ed CRC
+const uint8_t message_ready[]                = {FUSB_FIFO_RX_SOP, 0x66, 0x05, 0, 0, 0, 0}; // PS_READY with 0'ed CRC
 // Testing helpers
 
 void injectTestmessage(const uint8_t len, const uint8_t *data) {
@@ -84,23 +85,7 @@ void iterateThoughExpectedStates(std::vector<int> expectedStates) {
   CHECK_EQUAL(expectedStates[iterationCounter], pe.currentStateCode());
 }
 
-// Test Scenarios
-TEST(PD, PDNegotiationTest) {
-  // Testing states
-  CHECK_FALSE(pe.isPD3_0());
-  CHECK_FALSE(pe.NegotiationTimeoutReached(100));
-  CHECK_FALSE(pe.pdHasNegotiated());
-  // CHECK_FALSE(pe.setupCompleteOrTimedOut(100));
-  // Crank the handle until we are waiting for a pd message to come in, but with deadlock detection
-  iterateThoughExpectedStates({4, 5, 0});
-  // Now the thread should wait for an IRQ to signify it needs to poll data from the FUSB302
-  // First load up a SOP' message into the FIFO that it will need to ignore
-  injectTestmessage(sizeof(message_SOP1), message_SOP1);
-  iterateThoughExpectedStates({0});
-  // Also test SOP" are ignored
-  injectTestmessage(sizeof(message_SOP2), message_SOP2);
-
-  iterateThoughExpectedStates({0});
+void test_NormalNegotiation() {
 
   // Next queue an actual capabilities message
 
@@ -112,6 +97,7 @@ TEST(PD, PDNegotiationTest) {
   uint8_t       sendMessage[sizeof(expectedPD21VPPSMessage)];
   CHECK_EQUAL(5 + 6 + 4, sizeof(expectedPD21VPPSMessage));
   CHECK_TRUE(fusb_mock.readFiFo(sizeof(expectedPD21VPPSMessage), sendMessage));
+  CHECK_TRUE(fusb_mock.fifoEmpty()); // Assert we read it all out
   for (size_t i = 0; i < sizeof(expectedPD21VPPSMessage); i++) {
     // std::cout << "Validate Request Message" << i << "->" << (int)sendMessage[i] << "|" << (int)expectedPD21VPPSMessage[i] << std::endl;
     CHECK_EQUAL(sendMessage[i], expectedPD21VPPSMessage[i]);
@@ -137,5 +123,42 @@ TEST(PD, PDNegotiationTest) {
   // Now send the PS_RDY
   injectTestmessage(sizeof(message_ready), message_ready);
   iterateThoughExpectedStates({11, 12, 0});
-  // And _finally_ we are done, the unit is now in the ready state
+}
+
+// Test Scenarios
+TEST(PD, PDNegotiationTest) {
+  // Testing states
+  CHECK_FALSE(pe.isPD3_0());
+  CHECK_FALSE(pe.NegotiationTimeoutReached(100));
+  CHECK_FALSE(pe.pdHasNegotiated());
+  // CHECK_FALSE(pe.setupCompleteOrTimedOut(100));
+  // Crank the handle until we are waiting for a pd message to come in, but with deadlock detection
+  iterateThoughExpectedStates({4, 5, 0});
+  // Now the thread should wait for an IRQ to signify it needs to poll data from the FUSB302
+  // First load up a SOP' message into the FIFO that it will need to ignore
+  injectTestmessage(sizeof(message_SOP1), message_SOP1);
+  iterateThoughExpectedStates({0});
+  // Also test SOP" are ignored
+  injectTestmessage(sizeof(message_SOP2), message_SOP2);
+  iterateThoughExpectedStates({0});
+  // Now wind up to normal state (negotiated)
+  test_NormalNegotiation();
+  // Test that the unit can be asked for its capabilities
+  injectTestmessage(sizeof(message_request_capabilities), message_request_capabilities);
+  // The unit will then transition to send its capabilities
+  iterateThoughExpectedStates({12, 14, 0});
+  // Read out the transmitted message
+  const uint8_t expectedDeviceCaps[] = {18, 18, 18, 19, 142, 4, 50, 10, 144, 1, 28, 200, 64, 6, 0, 40, 200, 144, 193, 255, 20, 254, 161};
+  uint8_t       sendMessage[sizeof(expectedDeviceCaps)];
+  CHECK_TRUE(fusb_mock.readFiFo(sizeof(expectedDeviceCaps), sendMessage));
+  CHECK_TRUE(fusb_mock.fifoEmpty());
+  for (size_t i = 0; i < sizeof(expectedDeviceCaps); i++) {
+    // std::cout << "Validate Caps Message " << i << "->" << (int)sendMessage[i] << "|" << (int)expectedDeviceCaps[i] << std::endl;
+    CHECK_EQUAL(sendMessage[i], expectedDeviceCaps[i]);
+  }
+
+  fusb_mock.setRegister(FUSB_INTERRUPTA, FUSB_INTERRUPTA_I_TXSENT);
+  pe.IRQOccured();
+  iterateThoughExpectedStates({1, 0});
+  fusb_mock.setRegister(FUSB_INTERRUPTA, 0);
 }

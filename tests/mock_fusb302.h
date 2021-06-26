@@ -22,6 +22,7 @@ public:
   void reset();
   void resetFiFo();
   bool readFiFo(const uint8_t length, uint8_t *buffer);
+  bool fifoEmpty() { return fifoContent.size() == 0; };
 
 private:
   bool validateRegister(const uint8_t reg);
