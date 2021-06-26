@@ -63,9 +63,8 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_cap() {
   if (evt & (uint32_t)Notifications::MSG_RX) {
     std::cout << "MSG_RX" << std::endl;
     /* Get the message */
-    while (rxMessageWaiting) {
-      memcpy(&tempMessage, &rxMessage, sizeof(rxMessage));
-      rxMessageWaiting = false;
+    while (incomingMessages.getOccupied()) {
+      incomingMessages.pop(&tempMessage);
       /* If we got a Source_Capabilities message, read it. */
       std::cout << "Type" << PD_MSGTYPE_GET(&tempMessage) << std::endl;
       if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_SOURCE_CAPABILITIES && PD_NUMOBJ_GET(&tempMessage) > 0) {
@@ -146,9 +145,10 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_cap_resp() {
   clearEvents();
 
   /* Get the response message */
-  if (rxMessageWaiting) {
-    memcpy(&tempMessage, &rxMessage, sizeof(rxMessage));
-    rxMessageWaiting = false;
+  if (incomingMessages.getOccupied()) {
+
+    incomingMessages.pop(&tempMessage);
+
     /* If the source accepted our request, wait for the new power */
     if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_ACCEPT && PD_NUMOBJ_GET(&tempMessage) == 0) {
       return waitForEvent(PESinkTransitionSink, (uint32_t)Notifications::MSG_RX | (uint32_t)Notifications::RESET, PD_T_PS_TRANSITION);
@@ -175,9 +175,10 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_transition_sink() {
   /* Wait for the PS_RDY message */
   clearEvents();
   /* If we received a message, read it */
-  while (rxMessageWaiting) {
-    memcpy(&tempMessage, &rxMessage, sizeof(rxMessage));
-    rxMessageWaiting = false;
+  while (incomingMessages.getOccupied()) {
+
+    incomingMessages.pop(&tempMessage);
+
     /* If we got a PS_RDY, handle it */
     if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_PS_RDY && PD_NUMOBJ_GET(&tempMessage) == 0) {
       /* We just finished negotiating an explicit contract */
@@ -219,9 +220,10 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_ready() {
 
   /* If we received a message */
   if (evt & (uint32_t)Notifications::MSG_RX) {
-    if (rxMessageWaiting) {
-      memcpy(&tempMessage, &rxMessage, sizeof(rxMessage));
-      rxMessageWaiting = false;
+    if (incomingMessages.getOccupied()) {
+
+      incomingMessages.pop(&tempMessage);
+
       /* Ignore vendor-defined messages */
       if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_VENDOR_DEFINED && PD_NUMOBJ_GET(&tempMessage) > 0) {
         return waitForEvent(PESinkReady, (uint32_t)Notifications::ALL);
@@ -358,9 +360,10 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_send_soft_reset_resp() {
   clearEvents();
 
   /* Get the response message */
-  if (rxMessageWaiting) {
-    memcpy(&tempMessage, &rxMessage, sizeof(rxMessage));
-    rxMessageWaiting = false;
+  if (incomingMessages.getOccupied()) {
+
+    incomingMessages.pop(&tempMessage);
+
     /* If the source accepted our soft reset, wait for capabilities. */
     if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_ACCEPT && PD_NUMOBJ_GET(&tempMessage) == 0) {
 
@@ -437,13 +440,11 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_event() {
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_good_crc() {
   clearEvents();
 
-  if (rxMessageWaiting) {
+  if (incomingMessages.getOccupied()) {
     // Wait for the Good CRC
     pd_msg goodcrc;
-
     /* Read the GoodCRC */
-    memcpy(&goodcrc, &rxMessage, sizeof(rxMessage));
-    rxMessageWaiting = false;
+    incomingMessages.pop(&goodcrc);
 
     /* Check that the message is correct */
     if (PD_MSGTYPE_GET(&goodcrc) == PD_MSGTYPE_GOODCRC && PD_NUMOBJ_GET(&goodcrc) == 0 && PD_MESSAGEID_GET(&goodcrc) == _tx_messageidcounter) {
@@ -477,7 +478,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_send_done() {
   if ((uint32_t)evt & (uint32_t)Notifications::I_TXSENT) {
 
     clearEvents();
-    if (rxMessageWaiting) {
+    if (incomingMessages.getOccupied()) {
       return pe_sink_wait_good_crc();
     } else {
       // No Good CRC has arrived, these should _normally_ come really fast, but users implementation may be lagging

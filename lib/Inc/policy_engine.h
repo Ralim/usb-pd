@@ -19,9 +19,9 @@
 #define PDB_POLICY_ENGINE_H
 #include "fusb302b.h"
 #include "pd.h"
+#include "ringbuffer.h"
 #include <cstring>
 #include <stdint.h>
-
 class PolicyEngine {
 public:
   // Functions required to be created by the user for their end application
@@ -92,18 +92,13 @@ private:
   const SinkCapabilityFunc     pdbs_dpm_get_sink_capability;
   const EvaluateCapabilityFunc pdbs_dpm_evaluate_capability;
   const DelayFunc              osDelay;
+  bool                         pdNegotiationComplete;
+  int                          current_voltage_mv;   // The current voltage PD is expecting
+  int                          _requested_voltage;   // The voltage the unit wanted to requests
+  bool                         _unconstrained_power; // If the source is unconstrained
+  uint8_t                      _tx_messageidcounter; // Counter for messages sent to be packed into messages sent
+  uint16_t                     hdr_template;         /* PD message header template */
 
-  // Push an incoming message to the Policy Engine
-  void handleMessage();
-  void readPendingMessage();
-
-  bool pdNegotiationComplete;
-  int  current_voltage_mv;   // The current voltage PD is expecting
-  int  _requested_voltage;   // The voltage the unit wanted to requests
-  bool _unconstrained_power; // If the source is unconstrained
-
-  /* PD message header template */
-  uint16_t hdr_template;
   /* Whether or not we have an explicit contract */
   bool _explicit_contract;
   /* The number of hard resets we've sent */
@@ -111,7 +106,8 @@ private:
   /* The index of the first PPS APDO */
   uint8_t _pps_index;
 
-  uint8_t _tx_messageidcounter;
+  void readPendingMessage(); // Irq read message pending from the FiFo
+
   typedef enum {
     PEWaitingEvent             = 0,  // Meta state: waiting for event or timeout
     PEWaitingMessageTx         = 1,  // Meta state: waiting for message tx to confirm
@@ -196,11 +192,11 @@ private:
 
   // Event group
   // Temp messages for storage
-  pd_msg              tempMessage       = {0};
-  bool                rxMessageWaiting  = false;
-  pd_msg              rxMessage         = {0}; // irq will unpack recieved message to here
-  pd_msg              _last_dpm_request = {0};
-  policy_engine_state state             = policy_engine_state::PESinkStartup;
+  pd_msg                tempMessage = {0};
+  ringbuffer<pd_msg, 4> incomingMessages;
+  pd_msg                irqMessage        = {0}; // irq will unpack recieved message to here
+  pd_msg                _last_dpm_request = {0};
+  policy_engine_state   state             = policy_engine_state::PESinkStartup;
   // Read a pending message into the temp message
   bool     PPSTimerEnabled;
   uint32_t PPSTimeLastEvent;

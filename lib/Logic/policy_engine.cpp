@@ -143,10 +143,6 @@ bool PolicyEngine::thread() {
 
 bool PolicyEngine::isPD3_0() { return (hdr_template & PD_HDR_SPECREV) == PD_SPECREV_3_0; }
 
-void PolicyEngine::handleMessage() {
-  rxMessageWaiting = true;
-  notify(PolicyEngine::Notifications::MSG_RX);
-}
 bool PolicyEngine::NegotiationTimeoutReached(uint8_t timeout) {
   // Check if have been waiting longer than timeout without finishing
   // If so force state into the failed state and return true
