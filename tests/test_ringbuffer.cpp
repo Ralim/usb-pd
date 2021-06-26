@@ -8,6 +8,7 @@ TEST(RINGBUFFER, BasicCount) {
   ringbuffer<int, 10> buffer;
   for (int i = 0; i < 10; i++) {
     buffer.push(&i);
+    CHECK_EQUAL(i + 1, buffer.getOccupied());
   }
   for (int i = 0; i < 10; i++) {
     int x = 0;

@@ -1,7 +1,6 @@
 #ifndef RINGBUFFER_H_
 #define RINGBUFFER_H_
 
-#include <iostream>
 #include <string.h>
 /*
  * create a trivial ringbuffer with space for up to size elements.
@@ -14,19 +13,19 @@ public:
 
     memcpy(buffer + end, data, sizeof(T));
     // If going to wrap, push start along to maintain order
-    if (begin == end) {
-      wrap  = true;
+    if (begin == end && wrap) {
       begin = (begin + 1) % size;
     }
     end = (end + 1) % size;
-    std::cout << "push end " << end << " begin " << begin << std::endl;
+    if (begin == end) {
+      wrap = true;
+    }
   }
   // Give null to just drop the data
   void pop(T *dest) {
     if (getOccupied() == 0) {
       return;
     }
-    std::cout << "pop end " << end << " begin " << begin << std::endl;
 
     if (dest) {
       memcpy(dest, buffer + begin, sizeof(T));

@@ -4,6 +4,7 @@
     "files.associations": {
         "cstring": "cpp",
         "random": "cpp",
-        "future": "cpp"
+        "future": "cpp",
+        "ostream": "cpp"
     }
 }
