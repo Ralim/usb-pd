@@ -44,7 +44,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_discovery() {
   return PESinkSetupWaitCap;
 }
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_setup_wait_cap() { //
-  return waitForEvent(policy_engine_state::PESinkWaitCap, (uint32_t)Notifications::PDB_EVT_PE_MSG_RX | (uint32_t)Notifications::PDB_EVT_PE_I_OVRTEMP | (uint32_t)Notifications::PDB_EVT_PE_RESET,
+  return waitForEvent(policy_engine_state::PESinkWaitCap, (uint32_t)Notifications::MSG_RX | (uint32_t)Notifications::I_OVRTEMP | (uint32_t)Notifications::RESET,
                       // Wait for cap timeout
                       PD_T_TYPEC_SINK_WAIT_CAP);
 }
@@ -54,23 +54,23 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_cap() {
   clearEvents();
 
   /* If we timed out waiting for Source_Capabilities, send a hard reset */
-  if (evt & (uint32_t)Notifications::PDB_EVT_EVT_TIMEOUT) {
+  if (evt & (uint32_t)Notifications::TIMEOUT) {
     return PESinkHardReset;
   }
   /* If we got reset signaling, transition to default */
-  if (evt & (uint32_t)Notifications::PDB_EVT_PE_RESET) {
-    std::cout << "PDB_EVT_PE_RESET" << std::endl;
+  if (evt & (uint32_t)Notifications::RESET) {
+    std::cout << "RESET" << std::endl;
     return PESinkSetupWaitCap;
   }
   /* If we're too hot, we shouldn't negotiate power yet */
-  if (evt & (uint32_t)Notifications::PDB_EVT_PE_I_OVRTEMP) {
-    std::cout << "PDB_EVT_PE_I_OVRTEMP" << std::endl;
+  if (evt & (uint32_t)Notifications::I_OVRTEMP) {
+    std::cout << "I_OVRTEMP" << std::endl;
     return PESinkSetupWaitCap;
   }
 
   /* If we got a message */
-  if (evt & (uint32_t)Notifications::PDB_EVT_PE_MSG_RX) {
-    std::cout << "PDB_EVT_PE_MSG_RX" << std::endl;
+  if (evt & (uint32_t)Notifications::MSG_RX) {
+    std::cout << "MSG_RX" << std::endl;
     /* Get the message */
     while (rxMessageWaiting) {
       memcpy(&tempMessage, &rxMessage, sizeof(rxMessage));
@@ -147,7 +147,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_select_cap() {
   // Have transmitted the selected cap, transition to waiting for the response
   clearEvents();
   // wait for a response
-  return waitForEvent(PESinkWaitCapResp, (uint32_t)Notifications::PDB_EVT_PE_MSG_RX | (uint32_t)Notifications::PDB_EVT_PE_RESET | (uint32_t)Notifications::PDB_EVT_EVT_TIMEOUT, PD_T_SENDER_RESPONSE);
+  return waitForEvent(PESinkWaitCapResp, (uint32_t)Notifications::MSG_RX | (uint32_t)Notifications::RESET | (uint32_t)Notifications::TIMEOUT, PD_T_SENDER_RESPONSE);
 }
 
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_cap_resp() {
@@ -155,11 +155,11 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_cap_resp() {
   uint32_t evt = currentEvents;
   clearEvents();
   /* If we got reset signaling, transition to default */
-  if (evt & (uint32_t)Notifications::PDB_EVT_PE_RESET) {
+  if (evt & (uint32_t)Notifications::RESET) {
     return PESinkTransitionDefault;
   }
   /* If we didn't get a response before the timeout, send a hard reset */
-  if (evt == (uint32_t)Notifications::PDB_EVT_EVT_TIMEOUT) {
+  if (evt == (uint32_t)Notifications::TIMEOUT) {
     return PESinkSoftReset;
   }
 
@@ -169,7 +169,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_cap_resp() {
     rxMessageWaiting = false;
     /* If the source accepted our request, wait for the new power */
     if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_ACCEPT && PD_NUMOBJ_GET(&tempMessage) == 0) {
-      return waitForEvent(PESinkTransitionSink, (uint32_t)Notifications::PDB_EVT_PE_MSG_RX | (uint32_t)Notifications::PDB_EVT_PE_RESET, PD_T_PS_TRANSITION);
+      return waitForEvent(PESinkTransitionSink, (uint32_t)Notifications::MSG_RX | (uint32_t)Notifications::RESET, PD_T_PS_TRANSITION);
       /* If the message was a Soft_Reset, do the soft reset procedure */
     } else if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_SOFT_RESET && PD_NUMOBJ_GET(&tempMessage) == 0) {
       return PESinkSoftReset;
@@ -180,7 +180,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_cap_resp() {
         return PESinkSetupWaitCap;
         /* If we do have an explicit contract, go to the ready state */
       } else {
-        return waitForEvent(PESinkReady, (uint32_t)Notifications::PDB_EVT_PE_ALL, 0xFFFFFFFF);
+        return waitForEvent(PESinkReady, (uint32_t)Notifications::ALL, 0xFFFFFFFF);
       }
     } else {
       return PESinkSoftReset;
@@ -194,7 +194,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_transition_sink() {
   uint32_t evt = currentEvents;
   clearEvents();
   /* If we got reset signaling, transition to default */
-  if (evt & (uint32_t)Notifications::PDB_EVT_PE_RESET) {
+  if (evt & (uint32_t)Notifications::RESET) {
     return PESinkTransitionDefault;
   }
 
@@ -220,42 +220,42 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_ready() {
   uint32_t evt = currentEvents;
   clearEvents();
   /* If SinkPPSPeriodicTimer ran out, send a new request */
-  if (evt & (uint32_t)Notifications::PDB_EVT_PE_PPS_REQUEST) {
+  if (evt & (uint32_t)Notifications::PPS_REQUEST) {
     return PESinkSelectCap;
   }
   /* If we got reset signaling, transition to default */
-  if (evt & (uint32_t)Notifications::PDB_EVT_PE_RESET) {
+  if (evt & (uint32_t)Notifications::RESET) {
     return PESinkTransitionDefault;
   }
 
   /* If we overheated, send a hard reset */
-  if (evt & (uint32_t)Notifications::PDB_EVT_PE_I_OVRTEMP) {
+  if (evt & (uint32_t)Notifications::I_OVRTEMP) {
     return PESinkHardReset;
   }
   /* If the DPM wants us to, send a Get_Source_Cap message */
-  if (evt & (uint32_t)Notifications::PDB_EVT_PE_GET_SOURCE_CAP) {
+  if (evt & (uint32_t)Notifications::GET_SOURCE_CAP) {
     return PESinkGetSourceCap;
   }
   /* If the DPM wants new power, let it figure out what power it wants
    * exactly.  This isn't exactly the transition from the spec (that would be
    * SelectCap, not EvalCap), but this works better with the particular
    * design of this firmware. */
-  if (evt & (uint32_t)Notifications::PDB_EVT_PE_NEW_POWER) {
+  if (evt & (uint32_t)Notifications::NEW_POWER) {
     /* Tell the protocol layer we're starting an AMS */
     return PESinkEvalCap;
   }
 
   /* If we received a message */
-  if (evt & (uint32_t)Notifications::PDB_EVT_PE_MSG_RX) {
+  if (evt & (uint32_t)Notifications::MSG_RX) {
     if (rxMessageWaiting) {
       memcpy(&tempMessage, &rxMessage, sizeof(rxMessage));
       rxMessageWaiting = false;
       /* Ignore vendor-defined messages */
       if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_VENDOR_DEFINED && PD_NUMOBJ_GET(&tempMessage) > 0) {
-        return waitForEvent(PESinkReady, (uint32_t)Notifications::PDB_EVT_PE_ALL, 0xFFFFFFFF);
+        return waitForEvent(PESinkReady, (uint32_t)Notifications::ALL, 0xFFFFFFFF);
         /* Ignore Ping messages */
       } else if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_PING && PD_NUMOBJ_GET(&tempMessage) == 0) {
-        return waitForEvent(PESinkReady, (uint32_t)Notifications::PDB_EVT_PE_ALL, 0xFFFFFFFF);
+        return waitForEvent(PESinkReady, (uint32_t)Notifications::ALL, 0xFFFFFFFF);
         /* DR_Swap messages are not supported */
       } else if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_DR_SWAP && PD_NUMOBJ_GET(&tempMessage) == 0) {
         return PESinkSendNotSupported;
@@ -307,7 +307,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_ready() {
     }
   }
 
-  return waitForEvent(PESinkReady, (uint32_t)Notifications::PDB_EVT_PE_ALL, 0xFFFFFFFF);
+  return waitForEvent(PESinkReady, (uint32_t)Notifications::ALL, 0xFFFFFFFF);
 }
 
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_get_source_cap() {
@@ -324,7 +324,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_give_sink_cap() {
   /* Get a message object */
   pd_msg *snk_cap = &tempMessage;
   /* Get our capabilities from the DPM */
-  pdbs_dpm_get_sink_capability(snk_cap, dpm_get_range_fixed_pdo_index(snk_cap), ((hdr_template & PD_HDR_SPECREV) >= PD_SPECREV_3_0));
+  pdbs_dpm_get_sink_capability(snk_cap, ((hdr_template & PD_HDR_SPECREV) >= PD_SPECREV_3_0));
   /* Set the unconstrained power flag. */
   if (_unconstrained_power) {
     snk_cap->obj[0] |= PD_PDO_SNK_FIXED_UNCONSTRAINED;
@@ -382,8 +382,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_send_soft_reset() {
 }
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_send_soft_reset_tx_ok() {
   // Transmit is good, wait for response event
-  return waitForEvent(PESinkSendSoftResetResp, (uint32_t)Notifications::PDB_EVT_EVT_TIMEOUT | (uint32_t)Notifications::PDB_EVT_PE_MSG_RX | (uint32_t)Notifications::PDB_EVT_PE_RESET,
-                      PD_T_SENDER_RESPONSE);
+  return waitForEvent(PESinkSendSoftResetResp, (uint32_t)Notifications::TIMEOUT | (uint32_t)Notifications::MSG_RX | (uint32_t)Notifications::RESET, PD_T_SENDER_RESPONSE);
 }
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_send_soft_reset_resp() {
 
@@ -391,11 +390,11 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_send_soft_reset_resp() {
   uint32_t evt = currentEvents;
   clearEvents();
   /* If we got reset signaling, transition to default */
-  if (evt & (uint32_t)Notifications::PDB_EVT_PE_RESET) {
+  if (evt & (uint32_t)Notifications::RESET) {
     return PESinkTransitionDefault;
   }
   /* If we didn't get a response before the timeout, send a hard reset */
-  if (evt == (uint32_t)Notifications::PDB_EVT_EVT_TIMEOUT) {
+  if (evt == (uint32_t)Notifications::TIMEOUT) {
     return PESinkHardReset;
   }
 
@@ -446,7 +445,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_not_supported_received()
   /* Inform the Device Policy Manager that we received a Not_Supported
    * message. */
 
-  return waitForEvent(PESinkReady, (uint32_t)Notifications::PDB_EVT_PE_ALL, 0xFFFFFFFF);
+  return waitForEvent(PESinkReady, (uint32_t)Notifications::ALL, 0xFFFFFFFF);
 }
 
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_source_unresponsive() {
@@ -460,7 +459,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_event() {
   // Check timeout
   if (getTimeStamp() > waitingEventsTimeout) {
     std::cout << "Timeout ! " << getTimeStamp() << std::endl;
-    notify(Notifications::PDB_EVT_EVT_TIMEOUT);
+    notify(Notifications::TIMEOUT);
   }
   std::cout << "Current events " << currentEvents << " Wanted " << waitingEventsMask << std::endl;
   if (currentEvents & waitingEventsMask) {
@@ -472,7 +471,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_event() {
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_good_crc() {
   uint32_t evt = currentEvents;
   clearEvents();
-  if ((evt & (uint32_t)Notifications::PDB_EVT_EVT_TIMEOUT) || (evt & (uint32_t)Notifications::PDB_EVT_PE_RESET)) {
+  if ((evt & (uint32_t)Notifications::TIMEOUT) || (evt & (uint32_t)Notifications::RESET)) {
     return PESinkTransitionDefault;
   }
   if (rxMessageWaiting) {
@@ -488,18 +487,18 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_good_crc() {
       /* Increment MessageIDCounter */
       _tx_messageidcounter = (_tx_messageidcounter + 1) % 8;
 
-      notify(Notifications::PDB_EVT_PE_TX_DONE);
+      notify(Notifications::TX_DONE);
       return postSendState;
     } else {
       std::cout << PD_MSGTYPE_GET(&goodcrc) << std::endl;
       std::cout << PD_NUMOBJ_GET(&goodcrc) << std::endl;
       std::cout << PD_MESSAGEID_GET(&goodcrc) << std::endl;
       std::cout << (int)_tx_messageidcounter << std::endl;
-      notify(Notifications::PDB_EVT_PE_TX_ERR);
+      notify(Notifications::TX_ERR);
       return postSendFailedState;
     }
   }
-  notify(Notifications::PDB_EVT_PE_TX_ERR);
+  notify(Notifications::TX_ERR);
   return postSendFailedState;
 }
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_send_done() {
@@ -507,19 +506,19 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_send_done() {
   /* Waiting for response*/
   uint32_t evt = currentEvents;
   clearEvents();
-  if ((evt & (uint32_t)Notifications::PDB_EVT_EVT_TIMEOUT) || (evt & (uint32_t)Notifications::PDB_EVT_PE_RESET)) {
+  if ((evt & (uint32_t)Notifications::TIMEOUT) || (evt & (uint32_t)Notifications::RESET)) {
     return PESinkTransitionDefault;
   }
 
-  if ((uint32_t)evt & (uint32_t)Notifications::PDB_EVT_TX_DISCARD) {
+  if ((uint32_t)evt & (uint32_t)Notifications::DISCARD) {
     // increment the counter
     _tx_messageidcounter = (_tx_messageidcounter + 1) % 8;
-    notify(Notifications::PDB_EVT_PE_TX_ERR);
+    notify(Notifications::TX_ERR);
     return postSendFailedState;
   }
 
   /* If the message was sent successfully */
-  if ((uint32_t)evt & (uint32_t)Notifications::PDB_EVT_TX_I_TXSENT) {
+  if ((uint32_t)evt & (uint32_t)Notifications::I_TXSENT) {
 
     clearEvents();
     if (rxMessageWaiting) {
@@ -527,16 +526,16 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_send_done() {
     } else {
       // No Good CRC has arrived, these should _normally_ come really fast, but users implementation may be lagging
       // Setup a callback for this state
-      return waitForEvent(PEWaitingMessageGoodCRC, (uint32_t)Notifications::PDB_EVT_PE_MSG_RX, 100);
+      return waitForEvent(PEWaitingMessageGoodCRC, (uint32_t)Notifications::MSG_RX, 100);
     }
   }
   /* If the message failed to be sent */
-  if ((uint32_t)evt & (uint32_t)Notifications::PDB_EVT_TX_I_RETRYFAIL) {
-    notify(Notifications::PDB_EVT_PE_TX_ERR);
+  if ((uint32_t)evt & (uint32_t)Notifications::I_RETRYFAIL) {
+    notify(Notifications::TX_ERR);
     return postSendFailedState;
   }
 
   /* Silence the compiler warning */
-  notify(Notifications::PDB_EVT_PE_TX_ERR);
+  notify(Notifications::TX_ERR);
   return postSendFailedState;
 }

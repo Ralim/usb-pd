@@ -37,7 +37,7 @@ public:
   /*
    * Create a Sink_Capabilities message for our current capabilities.
    */
-  typedef void (*SinkCapabilityFunc)(pd_msg *cap, const int8_t pdo_index, const bool isPD3);
+  typedef void (*SinkCapabilityFunc)(pd_msg *cap, const bool isPD3);
   typedef uint32_t (*TimestampFunc)();
   typedef void (*DelayFunc)(uint32_t milliseconds);
   PolicyEngine(FUSB302 fusbStruct, TimestampFunc getTimestampF, DelayFunc delayFuncF, SinkCapabilityFunc sinkCapabilities, EvaluateCapabilityFunc evalFunc)
@@ -126,34 +126,34 @@ private:
     PESinkWaitCapResp          = 10, // Wait response message
     PESinkTransitionSink       = 11, // Transition to sink mode
     PESinkReady                = 12, // Normal operational state, all is good
-    PESinkGetSourceCap         = 13, //
-    PESinkGiveSinkCap          = 14, //
-    PESinkHardReset            = 15, //
-    PESinkTransitionDefault    = 16, //
+    PESinkGetSourceCap         = 13, // Request source capabilities
+    PESinkGiveSinkCap          = 14, // Device has been requested for its capabilities
+    PESinkHardReset            = 15, // Send a hard reset
+    PESinkTransitionDefault    = 16, // Transition to reset
     PESinkSoftReset            = 17, //
-    PESinkSendSoftReset        = 18, //
-    PESinkSendSoftResetTxOK    = 19, //
-    PESinkSendSoftResetResp    = 20, //
-    PESinkSendNotSupported     = 21, //
-    PESinkChunkReceived        = 22, //
-    PESinkNotSupportedReceived = 23, //
-    PESinkSourceUnresponsive   = 24, //
+    PESinkSendSoftReset        = 18, // Send soft reset (comms resync)
+    PESinkSendSoftResetTxOK    = 19, // Sending soft reset, waiting message tx
+    PESinkSendSoftResetResp    = 20, // Soft reset waiting for response
+    PESinkSendNotSupported     = 21, // Send a NACK message
+    PESinkChunkReceived        = 22, // On chunked (larger) message recieved
+    PESinkNotSupportedReceived = 23, // One of our messages was not supported
+    PESinkSourceUnresponsive   = 24, // A resting state for a source that doesnt talk (aka no PD)
   } policy_engine_state;
   enum class Notifications {
-    PDB_EVT_PE_RESET          = EVENT_MASK(0),
-    PDB_EVT_PE_MSG_RX         = EVENT_MASK(1),
-    PDB_EVT_PE_TX_DONE        = EVENT_MASK(2),
-    PDB_EVT_PE_TX_ERR         = EVENT_MASK(3),
-    PDB_EVT_PE_HARD_SENT      = EVENT_MASK(4),
-    PDB_EVT_PE_I_OVRTEMP      = EVENT_MASK(5),
-    PDB_EVT_PE_PPS_REQUEST    = EVENT_MASK(6),
-    PDB_EVT_PE_GET_SOURCE_CAP = EVENT_MASK(7),
-    PDB_EVT_PE_NEW_POWER      = EVENT_MASK(8),
-    PDB_EVT_TX_I_TXSENT       = EVENT_MASK(9),
-    PDB_EVT_TX_I_RETRYFAIL    = EVENT_MASK(10),
-    PDB_EVT_TX_DISCARD        = EVENT_MASK(11),
-    PDB_EVT_EVT_TIMEOUT       = EVENT_MASK(12),
-    PDB_EVT_PE_ALL            = (EVENT_MASK(13) - 1),
+    RESET          = EVENT_MASK(0),
+    MSG_RX         = EVENT_MASK(1),
+    TX_DONE        = EVENT_MASK(2),
+    TX_ERR         = EVENT_MASK(3),
+    HARD_SENT      = EVENT_MASK(4),
+    I_OVRTEMP      = EVENT_MASK(5),
+    PPS_REQUEST    = EVENT_MASK(6),
+    GET_SOURCE_CAP = EVENT_MASK(7),
+    NEW_POWER      = EVENT_MASK(8),
+    I_TXSENT       = EVENT_MASK(9),
+    I_RETRYFAIL    = EVENT_MASK(10),
+    DISCARD        = EVENT_MASK(11),
+    TIMEOUT        = EVENT_MASK(12), // Internal notification for timeout waiting for an event
+    ALL            = (EVENT_MASK(13) - 1),
   };
   // Send a notification
   void                notify(Notifications notification);
@@ -204,7 +204,6 @@ private:
   // Read a pending message into the temp message
   bool     PPSTimerEnabled;
   uint32_t PPSTimeLastEvent;
-  int8_t   dpm_get_range_fixed_pdo_index(const pd_msg *caps);
 };
 
 #endif /* PDB_POLICY_ENGINE_H */

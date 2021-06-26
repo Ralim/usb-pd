@@ -145,7 +145,7 @@ bool PolicyEngine::isPD3_0() { return (hdr_template & PD_HDR_SPECREV) == PD_SPEC
 
 void PolicyEngine::handleMessage() {
   rxMessageWaiting = true;
-  notify(PolicyEngine::Notifications::PDB_EVT_PE_MSG_RX);
+  notify(PolicyEngine::Notifications::MSG_RX);
 }
 bool PolicyEngine::NegotiationTimeoutReached(uint8_t timeout) {
   // Check if have been waiting longer than timeout without finishing
@@ -159,7 +159,7 @@ void PolicyEngine::PPSTimerCallback() {
     // Have to periodically re-send to keep the voltage level active
     if ((getTimeStamp() - PPSTimeLastEvent) > (1000)) {
       // Send a new PPS message
-      PolicyEngine::notify(Notifications::PDB_EVT_PE_PPS_REQUEST);
+      PolicyEngine::notify(Notifications::PPS_REQUEST);
       PPSTimeLastEvent = getTimeStamp();
     }
   }
@@ -185,45 +185,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_start_message_tx(PolicyEngine
   /* Send the message to the PHY */
   fusb.fusb_send_message(msg);
   // Setup waiting for notification
-  return waitForEvent(PEWaitingMessageTx,
-                      (uint32_t)Notifications::PDB_EVT_PE_RESET | (uint32_t)Notifications::PDB_EVT_TX_DISCARD | (uint32_t)Notifications::PDB_EVT_TX_I_TXSENT
-                          | (uint32_t)Notifications::PDB_EVT_TX_I_RETRYFAIL,
-                      0xFFFFFFFF);
-}
-
-/*
- * Find the index of the first PDO from capabilities in the voltage range,
- * using the desired order.
- *
- * If there is no such PDO, returns -1 instead.
- */
-int8_t PolicyEngine::dpm_get_range_fixed_pdo_index(const pd_msg *caps) {
-  /* Get the number of PDOs */
-  uint8_t numobj = PD_NUMOBJ_GET(caps);
-
-  /* Get ready to iterate over the PDOs */
-  int8_t i;
-  int8_t step;
-  i                   = numobj - 1;
-  step                = -1;
-  uint16_t current    = 100; // in centiamps
-  uint16_t voltagemin = 8000;
-  uint16_t voltagemax = 10000;
-  /* Look at the PDOs to see if one falls in our voltage range. */
-  while (0 <= i && i < numobj) {
-    /* If we have a fixed PDO, its V is within our range, and its I is at
-     * least our desired I */
-    uint16_t v = PD_PDO_SRC_FIXED_VOLTAGE_GET(caps->obj[i]);
-    if ((caps->obj[i] & PD_PDO_TYPE) == PD_PDO_TYPE_FIXED) {
-      if (PD_PDO_SRC_FIXED_CURRENT_GET(caps->obj[i]) >= current) {
-        if (v >= PD_MV2PDV(voltagemin) && v <= PD_MV2PDV(voltagemax)) {
-          return i;
-        }
-      }
-    }
-    i += step;
-  }
-  return -1;
+  return waitForEvent(PEWaitingMessageTx, (uint32_t)Notifications::RESET | (uint32_t)Notifications::DISCARD | (uint32_t)Notifications::I_TXSENT | (uint32_t)Notifications::I_RETRYFAIL, 0xFFFFFFFF);
 }
 
 void PolicyEngine::clearEvents(uint32_t notification) { currentEvents &= ~notification; }

@@ -26,10 +26,10 @@ void PolicyEngine::readPendingMessage() {
       /* If it's a Soft_Reset, go to the soft reset state */
       if (PD_MSGTYPE_GET(&rxMessage) == PD_MSGTYPE_SOFT_RESET && PD_NUMOBJ_GET(&rxMessage) == 0) {
         /* TX transitions to its reset state */
-        notify(Notifications::PDB_EVT_PE_RESET);
+        notify(Notifications::RESET);
       } else {
         /* Tell PolicyEngine to discard the message being transmitted */
-        notify(Notifications::PDB_EVT_TX_DISCARD);
+        notify(Notifications::DISCARD);
 
         /* Pass the message to the policy engine. */
         handleMessage();
@@ -37,7 +37,7 @@ void PolicyEngine::readPendingMessage() {
     } else {
       // Invalid message or SOP', still discard tx message
       /* Tell PolicyEngine to discard the message being transmitted */
-      notify(Notifications::PDB_EVT_TX_DISCARD);
+      notify(Notifications::DISCARD);
     }
   }
 }
@@ -58,18 +58,18 @@ bool PolicyEngine::IRQOccured() {
     /* If the I_TXSENT or I_RETRYFAIL flag is set, tell the Protocol TX
      * thread */
     if (status.interrupta & FUSB_INTERRUPTA_I_TXSENT) {
-      notify(Notifications::PDB_EVT_TX_I_TXSENT);
+      notify(Notifications::I_TXSENT);
       returnValue = true;
     }
     if (status.interrupta & FUSB_INTERRUPTA_I_RETRYFAIL) {
-      notify(Notifications::PDB_EVT_TX_I_RETRYFAIL);
+      notify(Notifications::I_RETRYFAIL);
       returnValue = true;
     }
 
     /* If the I_OCP_TEMP and OVRTEMP flags are set, tell the Policy
      * Engine thread */
     if ((status.interrupta & FUSB_INTERRUPTA_I_OCP_TEMP) && (status.status1 & FUSB_STATUS1_OVRTEMP)) {
-      notify(Notifications::PDB_EVT_PE_I_OVRTEMP);
+      notify(Notifications::I_OVRTEMP);
       returnValue = true;
     }
   }

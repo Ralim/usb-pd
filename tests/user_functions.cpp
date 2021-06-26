@@ -81,47 +81,25 @@ bool pdbs_dpm_evaluate_capability(const pd_msg *capabilities, pd_msg *request) {
   return true;
 }
 
-void pdbs_dpm_get_sink_capability(pd_msg *cap, const int8_t pdo_index, const bool isPD3) {
+void pdbs_dpm_get_sink_capability(pd_msg *cap, const bool isPD3) {
   /* Keep track of how many PDOs we've added */
   int numobj = 0;
 
-  /* If we have no configuration or want something other than 5 V, add a PDO
-   * for vSafe5V */
+  // Must always have a PDO object for vSafe5V, indicate the bare minimum power required
   /* Minimum current, 5 V, and higher capability. */
   cap->obj[numobj++] = PD_PDO_TYPE_FIXED | PD_PDO_SNK_FIXED_VOLTAGE_SET(PD_MV2PDV(5000)) | PD_PDO_SNK_FIXED_CURRENT_SET(DPM_MIN_CURRENT);
 
-  /* Get the current we want */
-  uint16_t voltage = 20 * 1000; // in mv
-  uint16_t current = 100 * 2;   // In centi-amps
+  if (true) { // If requesting more than 5V
+    /* Get the current we want */
+    uint16_t voltage = 20 * 1000; // in mv => 20V
+    uint16_t current = 2 * 100;   // In centi-amps => 2A
 
-  /* Add a PDO for the desired power. */
-  cap->obj[numobj++] = PD_PDO_TYPE_FIXED | PD_PDO_SNK_FIXED_VOLTAGE_SET(PD_MV2PDV(voltage)) | PD_PDO_SNK_FIXED_CURRENT_SET(current);
+    /* Add a PDO for the desired power. */
+    cap->obj[numobj++] = PD_PDO_TYPE_FIXED | PD_PDO_SNK_FIXED_VOLTAGE_SET(PD_MV2PDV(voltage)) | PD_PDO_SNK_FIXED_CURRENT_SET(current);
 
-  /* Get the PDO from the voltage range */
-  int8_t i = pdo_index;
-
-  /* If it's vSafe5V, set our vSafe5V's current to what we want */
-  if (i == 0) {
-    cap->obj[0] &= ~PD_PDO_SNK_FIXED_CURRENT;
-    cap->obj[0] |= PD_PDO_SNK_FIXED_CURRENT_SET(current);
-  } else {
     /* If we want more than 5 V, set the Higher Capability flag */
     if (PD_MV2PDV(voltage) != PD_MV2PDV(5000)) {
       cap->obj[0] |= PD_PDO_SNK_FIXED_HIGHER_CAP;
-    }
-
-    /* If the range PDO is a different voltage than the preferred
-     * voltage, add it to the array. */
-    if (i > 0 && PD_PDO_SRC_FIXED_VOLTAGE_GET(cap->obj[i]) != PD_MV2PDV(voltage)) {
-      cap->obj[numobj++] = PD_PDO_TYPE_FIXED | PD_PDO_SNK_FIXED_VOLTAGE_SET(PD_PDO_SRC_FIXED_VOLTAGE_GET(cap->obj[i])) | PD_PDO_SNK_FIXED_CURRENT_SET(PD_PDO_SRC_FIXED_CURRENT_GET(cap->obj[i]));
-    }
-
-    /* If we have three PDOs at this point, make sure the last two are
-     * sorted by voltage. */
-    if (numobj == 3 && (cap->obj[1] & PD_PDO_SNK_FIXED_VOLTAGE) > (cap->obj[2] & PD_PDO_SNK_FIXED_VOLTAGE)) {
-      cap->obj[1] ^= cap->obj[2];
-      cap->obj[2] ^= cap->obj[1];
-      cap->obj[1] ^= cap->obj[2];
     }
     /* If we're using PD 3.0, add a PPS APDO for our desired voltage */
     if (isPD3) {
@@ -129,7 +107,6 @@ void pdbs_dpm_get_sink_capability(pd_msg *cap, const int8_t pdo_index, const boo
           = PD_PDO_TYPE_AUGMENTED | PD_APDO_TYPE_PPS | PD_APDO_PPS_MAX_VOLTAGE_SET(PD_MV2PAV(voltage)) | PD_APDO_PPS_MIN_VOLTAGE_SET(PD_MV2PAV(voltage)) | PD_APDO_PPS_CURRENT_SET(PD_CA2PAI(current));
     }
   }
-
   /* Set the USB communications capable flag. */
   cap->obj[0] |= PD_PDO_SNK_FIXED_USB_COMMS;
 
