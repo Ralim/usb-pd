@@ -143,7 +143,6 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_select_cap() {
 
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_cap_resp() {
   /* Wait for a response */
-  uint32_t evt = currentEvents;
   clearEvents();
 
   /* Get the response message */
@@ -174,7 +173,6 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_cap_resp() {
 
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_transition_sink() {
   /* Wait for the PS_RDY message */
-  uint32_t evt = currentEvents;
   clearEvents();
   /* If we received a message, read it */
   while (rxMessageWaiting) {
@@ -357,7 +355,6 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_send_soft_reset_tx_ok() 
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_send_soft_reset_resp() {
 
   /* Wait for a response */
-  uint32_t evt = currentEvents;
   clearEvents();
 
   /* Get the response message */

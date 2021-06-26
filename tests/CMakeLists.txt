@@ -17,6 +17,7 @@ set(TEST_SOURCES
     mock_fusb302.cpp
     test_pd_policy_engine.cpp
     user_functions.cpp
+    test_ringbuffer.cpp
 )
 
 include_directories(${CPPUTEST_INCLUDE_DIRS} PRIVATE ../lib/ ../lib/Inc ../lib/FUSB302 )
