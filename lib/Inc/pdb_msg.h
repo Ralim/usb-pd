@@ -1,7 +1,6 @@
 /*
  * PD Buddy Firmware Library - USB Power Delivery for everyone
  * Copyright 2017-2018 Clayton G. Hobbs
- * Updated 2020-2021 Ben V. Brown <ralim@ralimtek.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,7 +30,7 @@
  * alignment.  Specifically, without the padding, &obj[0] != &bytes[2], making
  * the statement in the previous paragraph invalid.
  */
-union pd_msg {
+typedef union {
   struct {
     uint8_t _pad1[2];
     uint8_t bytes[30];
@@ -47,6 +46,6 @@ union pd_msg {
       };
     };
   } __attribute__((packed));
-};
+} pd_msg;
 
 #endif /* PDB_MSG_H */

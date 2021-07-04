@@ -1,7 +1,6 @@
 /*
  * PD Buddy Firmware Library - USB Power Delivery for everyone
  * Copyright 2017-2018 Clayton G. Hobbs
- * Updated 2020-2021 Ben V. Brown <ralim@ralimtek.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,85 +15,64 @@
  * limitations under the License.
  */
 
-#include "int_n.h"
-#include "BSP.h"
-#include "BSP_PD.h"
-#include "fusb302b.h"
-#include "fusbpd.h"
 #include "policy_engine.h"
-
-#include "protocol_tx.h"
-#include "task.h"
+#include <iostream>
 #include <pd.h>
 #include <string.h>
+void PolicyEngine::readPendingMessage() {
+  while (fusb.fusb_rx_pending()) {
+    /* Read the message */
+    if (fusb.fusb_read_message(&irqMessage) == 0) {
+      /* If it's a Soft_Reset, go to the soft reset state */
+      if (PD_MSGTYPE_GET(&irqMessage) == PD_MSGTYPE_SOFT_RESET && PD_NUMOBJ_GET(&irqMessage) == 0) {
+        /* PE transitions to its reset state */
+        notify(Notifications::RESET);
+      } else {
+        /* Tell PolicyEngine to discard the message being transmitted */
+        notify(Notifications::DISCARD);
+        /* Pass the message to the policy engine. */
+        incomingMessages.push(&irqMessage);
 
-volatile osThreadId InterruptHandler::TaskHandle = NULL;
-uint32_t InterruptHandler::TaskBuffer[InterruptHandler::TaskStackSize];
-osStaticThreadDef_t InterruptHandler::TaskControlBlock;
-union pd_msg InterruptHandler::tempMessage;
-
-void InterruptHandler::readPendingMessage() {
-  /* Get a buffer to read the message into.  Guaranteed to not fail
-   * because we have a big enough pool and are careful. */
-  memset(&tempMessage, 0, sizeof(tempMessage));
-  /* Read the message */
-  fusb_read_message(&tempMessage);
-  /* If it's a Soft_Reset, go to the soft reset state */
-  if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_SOFT_RESET &&
-      PD_NUMOBJ_GET(&tempMessage) == 0) {
-    /* TX transitions to its reset state */
-    ProtocolTransmit::notify(
-        ProtocolTransmit::Notifications::PDB_EVT_PRLTX_RESET);
-  } else {
-    /* Tell ProtocolTX to discard the message being transmitted */
-    ProtocolTransmit::notify(
-        ProtocolTransmit::Notifications::PDB_EVT_PRLTX_DISCARD);
-
-    /* Pass the message to the policy engine. */
-    PolicyEngine::handleMessage(&tempMessage);
+        notify(PolicyEngine::Notifications::MSG_RX);
+      }
+    } else {
+      // Invalid message or SOP', still discard tx message
+      /* Tell PolicyEngine to discard the message being transmitted */
+      notify(Notifications::DISCARD);
+    }
   }
 }
 
-void InterruptHandler::thread() {
-  union fusb_status status;
-  for (;;) {
-    // If the irq is low continue, otherwise wait for irq or timeout
-    if (!getFUS302IRQLow()) {
-      xTaskNotifyWait(0x00, 0x0F, NULL,
-                      PolicyEngine::setupCompleteOrTimedOut() ? 100 : 10);
-    }
-    /* Read the FUSB302B status and interrupt registers */
-    fusb_get_status(&status);
+bool PolicyEngine::IRQOccured() {
+  fusb_status status;
+  bool        returnValue = false;
+  /* Read the FUSB302B status and interrupt registers */
+  if (fusb.fusb_get_status(&status)) {
 
     /* If the I_GCRCSENT flag is set, tell the Protocol RX thread */
-    // This means a message was recieved with a good CRC
+    // This means a message was received with a good CRC
     if (status.interruptb & FUSB_INTERRUPTB_I_GCRCSENT) {
       readPendingMessage();
+      returnValue = true;
     }
 
     /* If the I_TXSENT or I_RETRYFAIL flag is set, tell the Protocol TX
      * thread */
     if (status.interrupta & FUSB_INTERRUPTA_I_TXSENT) {
-      ProtocolTransmit::notify(
-          ProtocolTransmit::Notifications::PDB_EVT_PRLTX_I_TXSENT);
+      notify(Notifications::I_TXSENT);
+      returnValue = true;
     }
     if (status.interrupta & FUSB_INTERRUPTA_I_RETRYFAIL) {
-      ProtocolTransmit::notify(
-          ProtocolTransmit::Notifications::PDB_EVT_PRLTX_I_RETRYFAIL);
+      notify(Notifications::I_RETRYFAIL);
+      returnValue = true;
     }
 
     /* If the I_OCP_TEMP and OVRTEMP flags are set, tell the Policy
      * Engine thread */
-    if ((status.interrupta & FUSB_INTERRUPTA_I_OCP_TEMP) &&
-        (status.status1 & FUSB_STATUS1_OVRTEMP)) {
-      PolicyEngine::notify(PolicyEngine::Notifications::PDB_EVT_PE_I_OVRTEMP);
+    if ((status.interrupta & FUSB_INTERRUPTA_I_OCP_TEMP) && (status.status1 & FUSB_STATUS1_OVRTEMP)) {
+      notify(Notifications::I_OVRTEMP);
+      returnValue = true;
     }
   }
-}
-void InterruptHandler::irqCallback() {
-  if (TaskHandle != NULL) {
-    BaseType_t taskWoke = pdFALSE;
-    xTaskNotifyFromISR(TaskHandle, 0x01, eNotifyAction::eSetBits, &taskWoke);
-    portYIELD_FROM_ISR(taskWoke);
-  }
+  return returnValue;
 }
