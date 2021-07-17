@@ -1,5 +1,6 @@
 #include "user_functions.hpp"
 #include "CppUTest/TestHarness.h"
+#include <cstring>
 /* The current draw when the output is disabled */
 #define DPM_MIN_CURRENT PD_MA2PDI(100)
 
