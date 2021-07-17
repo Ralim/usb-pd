@@ -41,7 +41,12 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_startup() {
 
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_discovery() {
 	/* Wait for VBUS.  Since it's our only power source, we already know that
-	 * we have it, so just move on. */
+	 * we have it, so just move on.
+	 * If this was not true, we would want to re-run CC line selection
+
+	fusb.runCCLineSelection();
+
+	*/
 
 	return PESinkSetupWaitCap;
 }
@@ -430,7 +435,6 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_send_soft_reset_resp() {
 			/* If the message was a Soft_Reset, do the soft reset procedure */
 		} else if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_SOFT_RESET
 				&& PD_NUMOBJ_GET(&tempMessage) == 0) {
-
 			return PESinkHandleSoftReset;
 			/* Otherwise, send a hard reset */
 		} else {
@@ -488,6 +492,10 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_event() {
 	}
 	if (currentEvents & (uint32_t) Notifications::TIMEOUT) {
 		clearEvents();
+		if (postNotifcationEvalState>=PESinkHandleSoftReset && postNotifcationEvalState<=PESinkSendSoftResetResp){
+			//Timeout in soft reset, so reset state machine
+			return PESinkStartup;
+		}
 		return PESinkSendSoftReset;
 	}
 	if (currentEvents & (uint32_t) Notifications::RESET) {
