@@ -148,6 +148,18 @@ bool FUSB302::fusb_setup() const {
 		return false;
 	}
 
+	if (!runCCLineSelection()) {
+		return false;
+	}
+	if (!fusb_reset()) {
+		return false;
+	}
+
+	return true;
+}
+
+bool FUSB302::runCCLineSelection() const {
+
 	/* Measure CC1 */
 	if (!fusb_write_byte(FUSB_SWITCHES0, 0x07)) {
 		return false;
@@ -182,14 +194,8 @@ bool FUSB302::fusb_setup() const {
 			return false;
 		}
 	}
-
-	if (!fusb_reset()) {
-		return false;
-	}
-
 	return true;
 }
-
 bool FUSB302::fusb_get_status(fusb_status *status) const {
 
 	/* Read the interrupt and status flags into status */

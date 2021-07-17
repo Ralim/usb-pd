@@ -63,6 +63,8 @@ public:
 
   bool fusb_read_id() const;
 
+  bool runCCLineSelection() const;
+
 private:
   const uint8_t DeviceAddress; // I2C address for this device
   // I2C bus access functions, should return true if command worked

@@ -126,7 +126,7 @@ private:
     PESinkGiveSinkCap          = 14, // Device has been requested for its capabilities
     PESinkHardReset            = 15, // Send a hard reset
     PESinkTransitionDefault    = 16, // Transition to reset
-    PESinkHandleSoftReset            = 17, // Soft reset received
+    PESinkHandleSoftReset      = 17, // Soft reset received
     PESinkSendSoftReset        = 18, // Send soft reset (comms resync)
     PESinkSendSoftResetTxOK    = 19, // Sending soft reset, waiting message tx
     PESinkSendSoftResetResp    = 20, // Soft reset waiting for response
