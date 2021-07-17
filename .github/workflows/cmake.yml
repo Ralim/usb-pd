@@ -22,7 +22,7 @@ jobs:
     - uses: actions/checkout@v2
     
     - name: install cpputest
-      run:  apt update &&  apt-get install -y cpputest 
+      run:  sudo apt update &&  sudo apt-get install -y cpputest 
     - name: Configure CMake
       run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}  -DCOMPILE_TESTS=TRUE
 
