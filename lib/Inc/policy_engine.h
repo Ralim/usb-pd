@@ -126,7 +126,7 @@ private:
     PESinkGiveSinkCap          = 14, // Device has been requested for its capabilities
     PESinkHardReset            = 15, // Send a hard reset
     PESinkTransitionDefault    = 16, // Transition to reset
-    PESinkSoftReset            = 17, //
+    PESinkHandleSoftReset            = 17, // Soft reset received
     PESinkSendSoftReset        = 18, // Send soft reset (comms resync)
     PESinkSendSoftResetTxOK    = 19, // Sending soft reset, waiting message tx
     PESinkSendSoftResetResp    = 20, // Soft reset waiting for response
@@ -136,19 +136,19 @@ private:
     PESinkSourceUnresponsive   = 24, // A resting state for a source that doesnt talk (aka no PD)
   } policy_engine_state;
   enum class Notifications {
-    RESET          = EVENT_MASK(0),
-    MSG_RX         = EVENT_MASK(1),
-    TX_DONE        = EVENT_MASK(2),
-    TX_ERR         = EVENT_MASK(3),
-    HARD_SENT      = EVENT_MASK(4),
-    I_OVRTEMP      = EVENT_MASK(5),
-    PPS_REQUEST    = EVENT_MASK(6),
-    GET_SOURCE_CAP = EVENT_MASK(7),
-    NEW_POWER      = EVENT_MASK(8),
-    I_TXSENT       = EVENT_MASK(9),
-    I_RETRYFAIL    = EVENT_MASK(10),
-    DISCARD        = EVENT_MASK(11),
-    TIMEOUT        = EVENT_MASK(12), // Internal notification for timeout waiting for an event
+    RESET          = EVENT_MASK(0),//1
+    MSG_RX         = EVENT_MASK(1),//2
+    TX_DONE        = EVENT_MASK(2),//4
+    TX_ERR         = EVENT_MASK(3),//8
+    HARD_SENT      = EVENT_MASK(4),//10
+    I_OVRTEMP      = EVENT_MASK(5),//20
+    PPS_REQUEST    = EVENT_MASK(6),//40
+    GET_SOURCE_CAP = EVENT_MASK(7),//80
+    NEW_POWER      = EVENT_MASK(8),//100
+    I_TXSENT       = EVENT_MASK(9),//200
+    I_RETRYFAIL    = EVENT_MASK(10),//400
+    DISCARD        = EVENT_MASK(11),//800
+    TIMEOUT        = EVENT_MASK(12),//1000 Internal notification for timeout waiting for an event
     ALL            = (EVENT_MASK(13) - 1),
   };
   // Send a notification

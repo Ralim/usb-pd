@@ -2,6 +2,7 @@
 #include <iostream>
 #include <queue>
 #include <stdint.h>
+
 /*
  * Implements a mockup of an FUSB302 that is used by testing
  * This works by having fake I2C handlers that talk to an internal state of registers

@@ -16,7 +16,6 @@
  */
 
 #include "policy_engine.h"
-#include <iostream>
 #include <pd.h>
 #include <string.h>
 void PolicyEngine::readPendingMessage() {

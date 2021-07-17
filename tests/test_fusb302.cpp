@@ -1,6 +1,7 @@
 #include "CppUTest/TestHarness.h"
 #include "fusb302_defines.h"
 #include "fusb302b.h"
+#include <cstring>
 #include <stdint.h>
 TEST_GROUP(FUSB){};
 TEST(FUSB, ReadDeviceIDHappyPath) {

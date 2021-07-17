@@ -59,7 +59,7 @@ public:
   /*
    * Reset the FUSB302B
    */
-  void fusb_reset() const;
+  bool fusb_reset() const;
 
   bool fusb_read_id() const;
 
