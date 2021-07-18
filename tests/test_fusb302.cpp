@@ -236,7 +236,7 @@ TEST(FUSB, ReadStatus) {
 
   FUSB302 f = FUSB302(0x23 << 1, mock_read, mock_write, mock_delay);
 
-  fusb_status statusOut;
+  FUSB302::fusb_status statusOut;
   f.fusb_get_status(&statusOut);
   CHECK_EQUAL(1, statusOut.status0a);
   CHECK_EQUAL(2, statusOut.status1a);

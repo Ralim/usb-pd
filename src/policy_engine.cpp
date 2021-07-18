@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 #include "policy_engine.h"
+#include "fusb302_defines.h"
 #include "fusb302b.h"
 #include <pd.h>
 #include <stdbool.h>
@@ -251,8 +252,8 @@ void PolicyEngine::readPendingMessage() {
 }
 
 bool PolicyEngine::IRQOccured() {
-  fusb_status status;
-  bool        returnValue = false;
+  FUSB302::fusb_status status;
+  bool                 returnValue = false;
   /* Read the FUSB302B status and interrupt registers */
   if (fusb.fusb_get_status(&status)) {
 

@@ -18,7 +18,7 @@
 #ifndef PDB_POLICY_ENGINE_H
 #define PDB_POLICY_ENGINE_H
 #include "fusb302b.h"
-#include "pd.h"
+#include "pdb_msg.h"
 #include "ringbuffer.h"
 #include <cstring>
 #include <stdint.h>

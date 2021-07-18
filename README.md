@@ -24,6 +24,7 @@ As part of this, some logic that was originally in the PD Buddy firmware has bee
 - Can work without an RTOS (you may need to put some work into)
 - Must be able to respond to the interrupt or poll in under 10ms
 - Can be used in polling for events (no irq) but its not reccomended
+- Little Endian processor (PD communication is LE, and this is assumed in the project)
 
 ## Implementing this library
 

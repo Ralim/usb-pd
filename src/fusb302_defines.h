@@ -225,23 +225,4 @@
 #define FUSB_FIFO_RX_SOP1DB     0x80
 #define FUSB_FIFO_RX_SOP2DB     0x60
 
-/*
- * FUSB status union
- *
- * Provides a nicer structure than just an array of uint8_t for working with
- * the FUSB302B status and interrupt flags.
- */
-typedef union {
-  uint8_t bytes[7];
-  struct {
-    uint8_t status0a;
-    uint8_t status1a;
-    uint8_t interrupta;
-    uint8_t interruptb;
-    uint8_t status0;
-    uint8_t status1;
-    uint8_t interrupt;
-  };
-} fusb_status;
-
 #endif

@@ -18,7 +18,6 @@
 #ifndef PDB_FUSB302B_H
 #define PDB_FUSB302B_H
 
-#include "fusb302_defines.h"
 #include "pd.h"
 #include "pdb_msg.h"
 
@@ -41,6 +40,24 @@ public:
    */
   void fusb_send_hardrst() const;
 
+  /*
+   * FUSB status union
+   *
+   * Provides a nicer structure than just an array of uint8_t for working with
+   * the FUSB302B status and interrupt flags.
+   */
+  typedef union {
+    uint8_t bytes[7];
+    struct {
+      uint8_t status0a;
+      uint8_t status1a;
+      uint8_t interrupta;
+      uint8_t interruptb;
+      uint8_t status0;
+      uint8_t status1;
+      uint8_t interrupt;
+    };
+  } fusb_status;
   /*
    * Read the FUSB302B status and interrupt flags into *status
    */

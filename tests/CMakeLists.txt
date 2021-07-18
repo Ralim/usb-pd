@@ -20,7 +20,7 @@ set(TEST_SOURCES
     test_ringbuffer.cpp
 )
 
-include_directories(${CPPUTEST_INCLUDE_DIRS} PRIVATE ../lib/ ../lib/Inc ../lib/FUSB302 )
+include_directories(${CPPUTEST_INCLUDE_DIRS} PRIVATE ../src ../include )
 include_directories(${CPPUTEST_INCLUDE_DIRS} .)
 link_directories(${CPPUTEST_LIBRARIES})
 
