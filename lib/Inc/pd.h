@@ -18,7 +18,6 @@
 #ifndef PDB_PD_H
 #define PDB_PD_H
 
-#include "pdb_conf.h"
 #include "pdb_msg.h"
 #include <stdint.h>
 /*
