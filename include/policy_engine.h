@@ -194,11 +194,11 @@ private:
 
   // Event group
   // Temp messages for storage
-  pd_msg                tempMessage = {0};
+  pd_msg                tempMessage;
   ringbuffer<pd_msg, 4> incomingMessages;
-  pd_msg                irqMessage        = {0}; // irq will unpack recieved message to here
-  pd_msg                _last_dpm_request = {0};
-  policy_engine_state   state             = policy_engine_state::PESinkStartup;
+  pd_msg                irqMessage; // irq will unpack recieved message to here
+  pd_msg                _last_dpm_request;
+  policy_engine_state   state = policy_engine_state::PESinkStartup;
   // Read a pending message into the temp message
   bool     PPSTimerEnabled;
   uint32_t PPSTimeLastEvent;
