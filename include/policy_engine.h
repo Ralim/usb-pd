@@ -57,17 +57,18 @@ public:
 
   // Returns true if headers indicate PD3.0 compliant
   bool isPD3_0();
+  bool hasExplicitContract() { return _explicit_contract; }
   bool setupCompleteOrTimedOut(uint8_t timeout) {
-    if (pdNegotiationComplete) {
-      return true;
-    }
-    if (PolicyEngine::NegotiationTimeoutReached(timeout)) {
+    if (_explicit_contract) {
       return true;
     }
     if (state == policy_engine_state::PESinkSourceUnresponsive) {
       return true;
     }
     if (state == policy_engine_state::PESinkReady) {
+      return true;
+    }
+    if (PolicyEngine::NegotiationTimeoutReached(timeout)) {
       return true;
     }
     return false;
@@ -99,7 +100,6 @@ private:
   const SinkCapabilityFunc     pdbs_dpm_get_sink_capability;
   const EvaluateCapabilityFunc pdbs_dpm_evaluate_capability;
   const DelayFunc              osDelay;
-  bool                         pdNegotiationComplete;
   int                          current_voltage_mv;   // The current voltage PD is expecting
   int                          _requested_voltage;   // The voltage the unit wanted to requests
   bool                         _unconstrained_power; // If the source is unconstrained
@@ -163,9 +163,10 @@ private:
   policy_engine_state postNotifcationEvalState;
   policy_engine_state postSendState;
   policy_engine_state postSendFailedState;
-  uint32_t            waitingEventsMask    = 0;
-  uint32_t            waitingEventsTimeout = 0;
-  uint32_t            currentEvents;
+  uint32_t            waitingEventsMask            = 0;
+  uint32_t            waitingEventsTimeout         = 0;
+  uint32_t            currentEvents                = 0;
+  uint32_t            timestampNegotiationsStarted = 0;
   void                clearEvents(uint32_t notification = 0xFFFFFF);
   policy_engine_state waitForEvent(policy_engine_state evalState, uint32_t notification, uint32_t timeout = 0xFFFFFFFF);
 
