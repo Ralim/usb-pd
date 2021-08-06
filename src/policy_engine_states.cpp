@@ -503,13 +503,6 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_send_done() {
     notify(Notifications::TX_ERR);
     return postSendFailedState;
   }
-  /* A discard was queued due to rx */
-  if ((uint32_t)evt & (uint32_t)Notifications::DISCARD) {
-    // increment the counter
-    _tx_messageidcounter = (_tx_messageidcounter + 1) % 8;
-    notify(Notifications::TX_ERR);
-    return postSendFailedState;
-  }
 
   /* Silence the compiler warning */
   notify(Notifications::TX_ERR);

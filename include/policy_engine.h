@@ -154,9 +154,8 @@ private:
     NEW_POWER      = EVENT_MASK(8),  // 100
     I_TXSENT       = EVENT_MASK(9),  // 200
     I_RETRYFAIL    = EVENT_MASK(10), // 400
-    DISCARD        = EVENT_MASK(11), // 800
-    TIMEOUT        = EVENT_MASK(12), // 1000 Internal notification for timeout waiting for an event
-    ALL            = (EVENT_MASK(13) - 1),
+    TIMEOUT        = EVENT_MASK(11), // 800 Internal notification for timeout waiting for an event
+    ALL            = (EVENT_MASK(12) - 1),
   };
   // Send a notification
   void                notify(Notifications notification);

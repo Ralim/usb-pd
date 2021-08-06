@@ -204,7 +204,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_start_message_tx(PolicyEngine
 #endif
 
   // Setup waiting for notification
-  return waitForEvent(PEWaitingMessageTx, (uint32_t)Notifications::RESET | (uint32_t)Notifications::DISCARD | (uint32_t)Notifications::I_TXSENT | (uint32_t)Notifications::I_RETRYFAIL, 0xFFFFFFFF);
+  return waitForEvent(PEWaitingMessageTx, (uint32_t)Notifications::RESET | (uint32_t)Notifications::I_TXSENT | (uint32_t)Notifications::I_RETRYFAIL, 0xFFFFFFFF);
 }
 
 void PolicyEngine::clearEvents(uint32_t notification) { currentEvents &= ~notification; }
@@ -251,7 +251,7 @@ void PolicyEngine::readPendingMessage() {
         notify(PolicyEngine::Notifications::MSG_RX);
       }
     } else {
-      // Invalid message or SOP', still discard tx message
+      // Invalid message or SOP'
     }
   }
 }
