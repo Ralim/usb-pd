@@ -86,7 +86,12 @@ public:
   bool IRQOccured();
   void printStateName();
   // Useful for debug reading out
-  int currentStateCode() { return (int)state; }
+  int currentStateCode() {
+    if (state == PEWaitingEvent) {
+      return (int)postNotifcationEvalState;
+    }
+    return (int)state;
+  }
 
 private:
   const FUSB302                fusb;
