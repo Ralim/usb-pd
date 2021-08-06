@@ -87,8 +87,8 @@ public:
   bool IRQOccured();
   void printStateName();
   // Useful for debug reading out
-  int currentStateCode() {
-    if (state == PEWaitingEvent) {
+  int currentStateCode(const bool noWait = false) {
+    if (noWait && (state == PEWaitingEvent)) {
       return (int)postNotifcationEvalState;
     }
     return (int)state;
