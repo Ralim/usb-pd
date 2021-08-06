@@ -154,7 +154,15 @@ bool PolicyEngine::isPD3_0() { return (hdr_template & PD_HDR_SPECREV) == PD_SPEC
 bool PolicyEngine::NegotiationTimeoutReached(uint8_t timeout) {
   // Check if have been waiting longer than timeout without finishing
   // If so force state into the failed state and return true
-  // TODO
+
+  // Timeout is in 100ms increments
+  // If the system ticks is greater than the specified timeout then we call it all off
+  if (timeout) {
+    if ((getTimeStamp() - timestampNegotiationsStarted) > (timeout * 100)) {
+      // state = policy_engine_state::PESinkSourceUnresponsive;
+      return true;
+    }
+  }
   return false;
 }
 
@@ -236,8 +244,7 @@ void PolicyEngine::readPendingMessage() {
         /* PE transitions to its reset state */
         notify(Notifications::RESET);
       } else {
-        /* Tell PolicyEngine to discard the message being transmitted */
-        notify(Notifications::DISCARD);
+
         /* Pass the message to the policy engine. */
         incomingMessages.push(&irqMessage);
 
@@ -245,8 +252,6 @@ void PolicyEngine::readPendingMessage() {
       }
     } else {
       // Invalid message or SOP', still discard tx message
-      /* Tell PolicyEngine to discard the message being transmitted */
-      notify(Notifications::DISCARD);
     }
   }
 }
