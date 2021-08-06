@@ -22,12 +22,7 @@
 #ifdef PD_DEBUG_OUTPUT
 #include "stdio.h"
 #endif
-
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_startup() {
-  /* We don't have an explicit contract currently */
-  _explicit_contract = false;
-  PPSTimerEnabled    = false;
-  currentEvents      = 0;
 
   /* No need to reset the protocol layer here.  There are two ways into this
    * state: startup and exiting hard reset.  On startup, the protocol layer
@@ -49,7 +44,11 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_discovery() {
   return PESinkSetupWaitCap;
 }
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_setup_wait_cap() { //
+  _explicit_contract = false;
+  PPSTimerEnabled    = false;
+  currentEvents      = 0;
 
+  timestampNegotiationsStarted = getTimeStamp();
   return waitForEvent(policy_engine_state::PESinkWaitCap, (uint32_t)Notifications::MSG_RX | (uint32_t)Notifications::I_OVRTEMP | (uint32_t)Notifications::RESET,
                       // Wait for cap timeout
                       PD_T_TYPEC_SINK_WAIT_CAP);
@@ -68,30 +67,28 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_cap() {
   }
 
   /* If we got a message */
-  if (incomingMessages.getOccupied() > 0) {
-    /* Get the message */
-    while (incomingMessages.getOccupied()) {
-      incomingMessages.pop(&tempMessage);
-      /* If we got a Source_Capabilities message, read it. */
-      if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_SOURCE_CAPABILITIES && PD_NUMOBJ_GET(&tempMessage) > 0) {
+  /* Get the message */
+  while (incomingMessages.getOccupied()) {
+    incomingMessages.pop(&tempMessage);
+    /* If we got a Source_Capabilities message, read it. */
+    if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_SOURCE_CAPABILITIES && PD_NUMOBJ_GET(&tempMessage) > 0) {
 #ifdef PD_DEBUG_OUTPUT
-        printf("Source Capabilities message RX\r\n");
+      printf("Source Capabilities message RX\r\n");
 #endif
 
-        /* First, determine what PD revision we're using */
-        if ((hdr_template & PD_HDR_SPECREV) == PD_SPECREV_1_0) {
-          /* If the other end is using at least version 3.0, we'll
-           * use version 3.0. */
-          if ((tempMessage.hdr & PD_HDR_SPECREV) >= PD_SPECREV_3_0) {
-            hdr_template |= PD_SPECREV_3_0;
-            /* Otherwise, use 2.0.  Don't worry about the 1.0 case
-             * because we don't have hardware for PD 1.0 signaling. */
-          } else {
-            hdr_template |= PD_SPECREV_2_0;
-          }
+      /* First, determine what PD revision we're using */
+      if ((hdr_template & PD_HDR_SPECREV) == PD_SPECREV_1_0) {
+        /* If the other end is using at least version 3.0, we'll
+         * use version 3.0. */
+        if ((tempMessage.hdr & PD_HDR_SPECREV) >= PD_SPECREV_3_0) {
+          hdr_template |= PD_SPECREV_3_0;
+          /* Otherwise, use 2.0.  Don't worry about the 1.0 case
+           * because we don't have hardware for PD 1.0 signaling. */
+        } else {
+          hdr_template |= PD_SPECREV_2_0;
         }
-        return PESinkEvalCap;
       }
+      return PESinkEvalCap;
     }
   }
 
@@ -194,7 +191,6 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_transition_sink() {
     if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_PS_RDY && PD_NUMOBJ_GET(&tempMessage) == 0) {
       /* We just finished negotiating an explicit contract */
       _explicit_contract = true;
-
       /* Negotiation finished */
       return PESinkReady;
       /* If there was a protocol error, send a hard reset */
@@ -334,7 +330,6 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_hard_reset() {
 }
 
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_transition_default() {
-  _explicit_contract = false;
 
   /* There is no local hardware to reset. */
   /* Since we never change our data role from UFP, there is no reason to set
@@ -433,6 +428,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_not_supported_received()
 
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_source_unresponsive() {
   // Sit and chill, as PD is not working
+  _explicit_contract = false;
   osDelay(PD_T_PD_DEBOUNCE);
 
   return PESinkSourceUnresponsive;
@@ -491,23 +487,15 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_send_done() {
   uint32_t evt = currentEvents;
   clearEvents();
 
-  if ((uint32_t)evt & (uint32_t)Notifications::DISCARD) {
-    // increment the counter
-    _tx_messageidcounter = (_tx_messageidcounter + 1) % 8;
-    notify(Notifications::TX_ERR);
-    return postSendFailedState;
-  }
-
   /* If the message was sent successfully */
   if ((uint32_t)evt & (uint32_t)Notifications::I_TXSENT) {
 
-    clearEvents();
     if (incomingMessages.getOccupied()) {
       return pe_sink_wait_good_crc();
     } else {
       // No Good CRC has arrived, these should _normally_ come really fast, but users implementation may be lagging
       // Setup a callback for this state
-      return waitForEvent(PEWaitingMessageGoodCRC, (uint32_t)Notifications::MSG_RX, 100);
+      return waitForEvent(PEWaitingMessageGoodCRC, (uint32_t)Notifications::MSG_RX, 120);
     }
   }
   /* If the message failed to be sent */

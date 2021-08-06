@@ -57,11 +57,9 @@ public:
 
   // Returns true if headers indicate PD3.0 compliant
   bool isPD3_0();
+  bool hasExplicitContract() { return _explicit_contract; }
   bool setupCompleteOrTimedOut(uint8_t timeout) {
-    if (pdNegotiationComplete) {
-      return true;
-    }
-    if (PolicyEngine::NegotiationTimeoutReached(timeout)) {
+    if (_explicit_contract) {
       return true;
     }
     if (state == policy_engine_state::PESinkSourceUnresponsive) {
@@ -70,13 +68,16 @@ public:
     if (state == policy_engine_state::PESinkReady) {
       return true;
     }
+    if (PolicyEngine::NegotiationTimeoutReached(timeout)) {
+      return true;
+    }
     return false;
   }
   // Has pd negotiation completed
   bool pdHasNegotiated() {
     if (state == policy_engine_state::PESinkSourceUnresponsive)
       return false;
-    return state >= PESinkReady;
+    return _explicit_contract;
   }
   // Call this periodically, by the spec at least once every 10 seconds. <5 is reccomended
   void PPSTimerCallback();
@@ -86,7 +87,12 @@ public:
   bool IRQOccured();
   void printStateName();
   // Useful for debug reading out
-  int currentStateCode() { return (int)state; }
+  int currentStateCode(const bool noWait = false) {
+    if (noWait && (state == PEWaitingEvent)) {
+      return (int)postNotifcationEvalState;
+    }
+    return (int)state;
+  }
 
 private:
   const FUSB302                fusb;
@@ -94,7 +100,6 @@ private:
   const SinkCapabilityFunc     pdbs_dpm_get_sink_capability;
   const EvaluateCapabilityFunc pdbs_dpm_evaluate_capability;
   const DelayFunc              osDelay;
-  bool                         pdNegotiationComplete;
   int                          current_voltage_mv;   // The current voltage PD is expecting
   int                          _requested_voltage;   // The voltage the unit wanted to requests
   bool                         _unconstrained_power; // If the source is unconstrained
@@ -149,18 +154,18 @@ private:
     NEW_POWER      = EVENT_MASK(8),  // 100
     I_TXSENT       = EVENT_MASK(9),  // 200
     I_RETRYFAIL    = EVENT_MASK(10), // 400
-    DISCARD        = EVENT_MASK(11), // 800
-    TIMEOUT        = EVENT_MASK(12), // 1000 Internal notification for timeout waiting for an event
-    ALL            = (EVENT_MASK(13) - 1),
+    TIMEOUT        = EVENT_MASK(11), // 800 Internal notification for timeout waiting for an event
+    ALL            = (EVENT_MASK(12) - 1),
   };
   // Send a notification
   void                notify(Notifications notification);
   policy_engine_state postNotifcationEvalState;
   policy_engine_state postSendState;
   policy_engine_state postSendFailedState;
-  uint32_t            waitingEventsMask    = 0;
-  uint32_t            waitingEventsTimeout = 0;
-  uint32_t            currentEvents;
+  uint32_t            waitingEventsMask            = 0;
+  uint32_t            waitingEventsTimeout         = 0;
+  uint32_t            currentEvents                = 0;
+  uint32_t            timestampNegotiationsStarted = 0;
   void                clearEvents(uint32_t notification = 0xFFFFFF);
   policy_engine_state waitForEvent(policy_engine_state evalState, uint32_t notification, uint32_t timeout = 0xFFFFFFFF);
 

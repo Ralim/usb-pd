@@ -154,7 +154,15 @@ bool PolicyEngine::isPD3_0() { return (hdr_template & PD_HDR_SPECREV) == PD_SPEC
 bool PolicyEngine::NegotiationTimeoutReached(uint8_t timeout) {
   // Check if have been waiting longer than timeout without finishing
   // If so force state into the failed state and return true
-  // TODO
+
+  // Timeout is in 100ms increments
+  // If the system ticks is greater than the specified timeout then we call it all off
+  if (timeout) {
+    if ((getTimeStamp() - timestampNegotiationsStarted) > (timeout * 100)) {
+      // state = policy_engine_state::PESinkSourceUnresponsive;
+      return true;
+    }
+  }
   return false;
 }
 
@@ -196,7 +204,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_start_message_tx(PolicyEngine
 #endif
 
   // Setup waiting for notification
-  return waitForEvent(PEWaitingMessageTx, (uint32_t)Notifications::RESET | (uint32_t)Notifications::DISCARD | (uint32_t)Notifications::I_TXSENT | (uint32_t)Notifications::I_RETRYFAIL, 0xFFFFFFFF);
+  return waitForEvent(PEWaitingMessageTx, (uint32_t)Notifications::RESET | (uint32_t)Notifications::I_TXSENT | (uint32_t)Notifications::I_RETRYFAIL, 0xFFFFFFFF);
 }
 
 void PolicyEngine::clearEvents(uint32_t notification) { currentEvents &= ~notification; }
@@ -236,17 +244,14 @@ void PolicyEngine::readPendingMessage() {
         /* PE transitions to its reset state */
         notify(Notifications::RESET);
       } else {
-        /* Tell PolicyEngine to discard the message being transmitted */
-        notify(Notifications::DISCARD);
+
         /* Pass the message to the policy engine. */
         incomingMessages.push(&irqMessage);
 
         notify(PolicyEngine::Notifications::MSG_RX);
       }
     } else {
-      // Invalid message or SOP', still discard tx message
-      /* Tell PolicyEngine to discard the message being transmitted */
-      notify(Notifications::DISCARD);
+      // Invalid message or SOP'
     }
   }
 }
