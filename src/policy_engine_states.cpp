@@ -491,27 +491,26 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_send_done() {
   uint32_t evt = currentEvents;
   clearEvents();
 
-  if ((uint32_t)evt & (uint32_t)Notifications::DISCARD) {
-    // increment the counter
-    _tx_messageidcounter = (_tx_messageidcounter + 1) % 8;
-    notify(Notifications::TX_ERR);
-    return postSendFailedState;
-  }
-
   /* If the message was sent successfully */
   if ((uint32_t)evt & (uint32_t)Notifications::I_TXSENT) {
 
-    clearEvents();
     if (incomingMessages.getOccupied()) {
       return pe_sink_wait_good_crc();
     } else {
       // No Good CRC has arrived, these should _normally_ come really fast, but users implementation may be lagging
       // Setup a callback for this state
-      return waitForEvent(PEWaitingMessageGoodCRC, (uint32_t)Notifications::MSG_RX, 100);
+      return waitForEvent(PEWaitingMessageGoodCRC, (uint32_t)Notifications::MSG_RX, 120);
     }
   }
   /* If the message failed to be sent */
   if ((uint32_t)evt & (uint32_t)Notifications::I_RETRYFAIL) {
+    notify(Notifications::TX_ERR);
+    return postSendFailedState;
+  }
+  /* A discard was queued due to rx */
+  if ((uint32_t)evt & (uint32_t)Notifications::DISCARD) {
+    // increment the counter
+    _tx_messageidcounter = (_tx_messageidcounter + 1) % 8;
     notify(Notifications::TX_ERR);
     return postSendFailedState;
   }
