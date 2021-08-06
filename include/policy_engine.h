@@ -77,7 +77,7 @@ public:
   bool pdHasNegotiated() {
     if (state == policy_engine_state::PESinkSourceUnresponsive)
       return false;
-    return state >= PESinkReady;
+    return _explicit_contract;
   }
   // Call this periodically, by the spec at least once every 10 seconds. <5 is reccomended
   void PPSTimerCallback();
