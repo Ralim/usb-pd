@@ -205,7 +205,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_ready() {
   clearEvents();
   /* If SinkPPSPeriodicTimer ran out, send a new request */
   if (evt & (uint32_t)Notifications::PPS_REQUEST) {
-    return PESinkSelectCap;
+    return PESinkSelectCapTx;
   }
 
   /* If we overheated, send a hard reset */
