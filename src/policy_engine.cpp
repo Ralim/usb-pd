@@ -167,7 +167,7 @@ bool PolicyEngine::NegotiationTimeoutReached(uint8_t timeout) {
 }
 
 void PolicyEngine::PPSTimerCallback() {
-  if (PPSTimerEnabled && state == policy_engine_state::PESinkReady) {
+  if (PPSTimerEnabled) {
     // Have to periodically re-send to keep the voltage level active
     if ((getTimeStamp() - PPSTimeLastEvent) > (1000)) {
       // Send a new PPS message
