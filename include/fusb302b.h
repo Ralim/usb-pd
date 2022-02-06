@@ -82,6 +82,9 @@ public:
 
   bool runCCLineSelection() const;
 
+  // Measure VBus with the MADC and check if its connected
+  bool isVBUSConnected() const;
+
 private:
   const uint8_t DeviceAddress; // I2C address for this device
   // I2C bus access functions, should return true if command worked

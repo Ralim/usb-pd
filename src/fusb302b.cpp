@@ -189,6 +189,24 @@ bool FUSB302::runCCLineSelection() const {
   }
   return true;
 }
+
+bool FUSB302::isVBUSConnected() const {
+  // So we want to set MEAS_VBUS to enable measuring the VBus signal
+  // Then check the status
+  uint8_t measureBackup  = fusb_read_byte(FUSB_MEASURE);
+  uint8_t switchesBackup = fusb_read_byte(FUSB_SWITCHES0);
+  // clear MEAS_CCx bits
+  fusb_write_byte(FUSB_SWITCHES0, switchesBackup & 0b11110011);
+  osDelay(10);
+  fusb_write_byte(FUSB_MEASURE, 0b01000000);
+  osDelay(100);
+  uint8_t status = fusb_read_byte(FUSB_STATUS0);
+  // Write back original value
+  fusb_write_byte(FUSB_MEASURE, measureBackup);
+  fusb_write_byte(FUSB_SWITCHES0, switchesBackup);
+  return (status & (0b00100000)) != 0;
+}
+
 bool FUSB302::fusb_get_status(fusb_status *status) const {
 
   /* Read the interrupt and status flags into status */
