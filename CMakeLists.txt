@@ -9,7 +9,7 @@ set(APP_LIB_NAME USBPDLib)
 
 # (2) Include application build instructions
 
-add_library(${APP_LIB_NAME} SHARED
+add_library(${APP_LIB_NAME} STATIC
     src/policy_engine.cpp
     src/policy_engine_states.cpp
     src/fusb302b.cpp
