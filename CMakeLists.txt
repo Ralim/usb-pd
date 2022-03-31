@@ -15,7 +15,7 @@ add_library(${APP_LIB_NAME} SHARED
     src/fusb302b.cpp
 )
 
-target_include_directories(${APP_LIB_NAME} PRIVATE include src)
+target_include_directories(${APP_LIB_NAME} PUBLIC include src)
 
 # (3) include tests build instructions   
 option(COMPILE_TESTS "Compile the tests" OFF)
