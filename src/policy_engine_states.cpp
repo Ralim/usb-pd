@@ -481,7 +481,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_event() {
   }
   if (currentEvents & (uint32_t)Notifications::TIMEOUT) {
     clearEvents();
-    if (postNotifcationEvalState >= PESinkHandleSoftReset && postNotifcationEvalState <= PESinkSendSoftResetResp) {
+    if (postNotificationEvalState >= PESinkHandleSoftReset && postNotificationEvalState <= PESinkSendSoftResetResp) {
       // Timeout in soft reset, so reset state machine
       return PESinkStartup;
     }
@@ -492,7 +492,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_event() {
   }
 
   if (currentEvents & waitingEventsMask) {
-    return postNotifcationEvalState;
+    return postNotificationEvalState;
   }
   return policy_engine_state::PEWaitingEvent;
 }

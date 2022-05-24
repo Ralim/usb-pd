@@ -250,7 +250,7 @@ PolicyEngine::policy_engine_state PolicyEngine::waitForEvent(PolicyEngine::polic
       return evalState;
     }
   }
-  postNotifcationEvalState = evalState;
+  postNotificationEvalState = evalState;
   if (timeout == 0xFFFFFFFF) {
     waitingEventsTimeout = 0xFFFFFFFF;
   } else {

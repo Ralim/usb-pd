@@ -94,7 +94,7 @@ public:
   // Useful for debug reading out
   int currentStateCode(const bool noWait = false) {
     if (noWait && (state == PEWaitingEvent)) {
-      return (int)postNotifcationEvalState;
+      return (int)postNotificationEvalState;
     }
     return (int)state;
   }
@@ -182,7 +182,7 @@ private:
   };
   // Send a notification
   void                notify(Notifications notification);
-  policy_engine_state postNotifcationEvalState;
+  policy_engine_state postNotificationEvalState;
   policy_engine_state postSendState;
   policy_engine_state postSendFailedState;
   uint32_t            waitingEventsMask            = 0;

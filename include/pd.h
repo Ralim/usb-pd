@@ -66,6 +66,9 @@
 #define PD_MSGTYPE_FR_SWAP                 0x13
 #define PD_MSGTYPE_GET_PPS_STATUS          0x14
 #define PD_MSGTYPE_GET_COUNTRY_CODES       0x15
+#define PD_MSGTYPE_GET_SINK_CAP_EXTENDED   0x16
+#define PD_MSGTYPE_GET_SOURCE_INFO         0x17
+#define PD_MSGTYPE_GET_REVISION            0x18
 /* Data Message */
 #define PD_MSGTYPE_SOURCE_CAPABILITIES 0x01
 #define PD_MSGTYPE_REQUEST             0x02
@@ -74,9 +77,12 @@
 #define PD_MSGTYPE_BATTERY_STATUS      0x05
 #define PD_MSGTYPE_ALERT               0x06
 #define PD_MSGTYPE_GET_COUNTRY_INFO    0x07
-#define PD_MSGTYPE_VENDOR_DEFINED      0x0F
+#define PD_MSGTYPE_ENTER_USB           0x08
 #define PD_MSGTYPE_EPR_REQUEST         0x09
 #define PD_MSGTYPE_EPR_MODE            0x0A
+#define PD_MSGTYPE_SOURCE_INFO         0x0B
+#define PD_MSGTYPE_REVISION            0x0C
+#define PD_MSGTYPE_VENDOR_DEFINED      0x0F
 /* Extended Message */
 #define PD_MSGTYPE_SOURCE_CAPABILITIES_EXTENDED 0x01
 #define PD_MSGTYPE_STATUS                       0x02
@@ -92,8 +98,10 @@
 #define PD_MSGTYPE_PPS_STATUS                   0x0C
 #define PD_MSGTYPE_COUNTRY_INFO                 0x0D
 #define PD_MSGTYPE_COUNTRY_CODES                0x0E
-#define PD_MSGTYPE_EPR_SOURCE_CAPABILITIES      0x11
+#define PD_MSGTYPE_SINK_CAPABILITIES_EXTENDED   0x0F
 #define PD_MSGTYPE_EXTENDED_CONTROL             0x10
+#define PD_MSGTYPE_EPR_SOURCE_CAPABILITIES      0x11
+#define PD_MSGTYPE_VENDOR_DEFINED_EXTENDED      0x1E
 
 /* Data roles */
 #define PD_DATAROLE_UFP (0x0 << PD_HDR_DATAROLE_SHIFT)
@@ -243,6 +251,8 @@
 #define PD_RDO_NO_USB_SUSPEND          (1 << PD_RDO_NO_USB_SUSPEND_SHIFT)
 #define PD_RDO_UNCHUNKED_EXT_MSG_SHIFT 23
 #define PD_RDO_UNCHUNKED_EXT_MSG       (1 << PD_RDO_UNCHUNKED_EXT_MSG_SHIFT)
+#define PD_RDO_EPR_CAPABLE_SHIFT       23
+#define PD_RDO_EPR_CAPABLE             (1 << PD_RDO_EPR_CAPABLE_SHIFT)
 
 #define PD_RDO_OBJPOS_SET(i)   (((i) << PD_RDO_OBJPOS_SHIFT) & PD_RDO_OBJPOS)
 #define PD_RDO_OBJPOS_GET(msg) (((msg)->obj[0] & PD_RDO_OBJPOS) >> PD_RDO_OBJPOS_SHIFT)
