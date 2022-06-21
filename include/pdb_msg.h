@@ -48,4 +48,28 @@ typedef union {
 	} __attribute__((packed));
 } __attribute__((packed)) pd_msg;
 
+
+/**
+ * EPR PD message union
+ * 
+ * EPR requires the use of messages longer than 26 bytes, which the above union
+ * cannot handle.  This union can handle messagaes up to 44 bytes long - 11
+ * PDOs, which is the maximum number in an EPR Source Capabiltiies message.
+ * 
+ * The padding has been removed, as on ARM unaligned reads are not allowed to
+ * occur.  With the padding, if you attempted to read from obj[0] an error
+ * would occur as it would be 16 bits out of alignment.
+ */
+typedef union {
+    uint8_t bytes[48];
+    struct {
+        uint16_t hdr;
+        uint16_t exthdr;
+        union {
+            uint32_t obj[11];
+            uint8_t data[44];
+        } __attribute__((packed));
+    } __attribute__((packed));
+} __attribute__((packed)) epr_pd_msg;
+
 #endif /* PDB_MSG_H */

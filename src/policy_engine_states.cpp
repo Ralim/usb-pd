@@ -158,6 +158,10 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_cap_resp() {
     incomingMessages.pop(&tempMessage);
     /* If the source accepted our request, wait for the new power message*/
     if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_ACCEPT && PD_NUMOBJ_GET(&tempMessage) == 0) {
+      is_epr = (PD_NUMOBJ_GET(&_last_dpm_request) == 2);
+      if (is_epr) {
+        EPRTimeLastEvent = getTimeStamp();
+      }
       return waitForEvent(PESinkTransitionSink, (uint32_t)Notifications::MSG_RX | (uint32_t)Notifications::RESET, PD_T_PS_TRANSITION);
       /* If the message was a Soft_Reset, do the soft reset procedure */
     } else if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_SOFT_RESET && PD_NUMOBJ_GET(&tempMessage) == 0) {
@@ -225,6 +229,14 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_ready() {
     return PESinkEvalCap;
   }
 
+  if (evt & (uint32_t)Notifications::REQUEST_EPR) {
+    return PESinkRequestEPR;
+  }
+
+  if (evt & (uint32_t)Notifications::EPR_KEEPALIVE) {
+    return PESinkSendEPRKeepAlive;
+  }
+
   /* If we received a message */
   if (evt & (uint32_t)Notifications::MSG_RX) {
     if (incomingMessages.getOccupied()) {
@@ -268,12 +280,30 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_ready() {
       } else if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_SOFT_RESET && PD_NUMOBJ_GET(&tempMessage) == 0) {
         return PESinkHandleSoftReset;
         /* PD 3.0 messges */
-      } else if ((hdr_template & PD_HDR_SPECREV) == PD_SPECREV_3_0) {
+      } else if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_EPR_MODE && PD_NUMOBJ_GET(&tempMessage) > 0) {
+        if (tempMessage.bytes[0] == 3) {
+          is_epr = true;
+          EPRTimeLastEvent = getTimeStamp();
+          //return PESinkReady; 
+          // We unchunk the extended messages from Ready but will wait for the RX event
+        } else if (tempMessage.bytes[0] == 4) {
+          is_epr = false;
+          return PESinkReady;
+          // We attempted to enter EPR and failed, no need to renegotiate
+        } else if (tempMessage.bytes[0] == 5) {
+          is_epr = false;
+          return PESinkWaitCap; // We exited EPR so now need to renegotiate an SPR contract
+        }
+      }else if ((hdr_template & PD_HDR_SPECREV) == PD_SPECREV_3_0) {
         /* If the message is a multi-chunk extended message, let it
          * time out. */
         if ((tempMessage.hdr & PD_HDR_EXT) && (PD_DATA_SIZE_GET(&tempMessage) > PD_MAX_EXT_MSG_LEGACY_LEN)) {
-
-          return PESinkChunkReceived;
+          if ((PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_EPR_SOURCE_CAPABILITIES) && (PD_DATA_SIZE_GET(&tempMessage) <= 44)) {
+            return PESinkHandleEPRChunk;
+          } else {
+            return PESinkSendNotSupported;
+            // We can support _some_ chunked messages but not all
+          }
           /* Tell the DPM a message we sent got a response of
            * Not_Supported. */
         } else if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_NOT_SUPPORTED && PD_NUMOBJ_GET(&tempMessage) == 0) {
@@ -411,12 +441,22 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_send_not_supported() {
   return pe_start_message_tx(PESinkReady, PESinkSendSoftReset, &tempMessage);
 }
 
-PolicyEngine::policy_engine_state PolicyEngine::pe_sink_chunk_received() {
+PolicyEngine::policy_engine_state PolicyEngine::pe_sink_handle_epr_chunk() {
+  uint8_t chunk_index = PD_CHUNK_NUMBER_GET(&tempMessage);
 
-  /* Wait for tChunkingNotSupported */
-  osDelay(PD_T_CHUNKING_NOT_SUPPORTED);
-
-  return PESinkSendNotSupported;
+  if (chunk_index == 0) {
+    memcpy(&this->recent_epr_capabilities, &tempMessage.bytes, sizeof(tempMessage.bytes));
+  } else {
+    memcpy(&(this->recent_epr_capabilities.data[chunk_index * PD_MAX_EXT_MSG_CHUNK_LEN]), &tempMessage.data, 2 + (4 * (PD_NUMOBJ_GET(&tempMessage) - 1)));
+  }
+  if (((PD_MAX_EXT_MSG_CHUNK_LEN * chunk_index) + (4 * PD_NUMOBJ_GET(&tempMessage) - 2)) >= PD_DATA_SIZE_GET(&tempMessage)) {
+    return PESinkEPREvalCap;
+  } else {
+    pd_msg *chunk_request = &tempMessage;
+    chunk_request->hdr    = this->hdr_template | (tempMessage.hdr & PD_HDR_MSGTYPE) | PD_NUMOBJ(1) | PD_HDR_EXT;
+    chunk_request->exthdr = ((chunk_index + 1) << PD_EXTHDR_CHUNK_NUMBER_SHIFT) | PD_EXTHDR_REQUEST_CHUNK | PD_EXTHDR_CHUNKED;
+    return pe_start_message_tx(PESinkReady, PESinkHardReset, chunk_request);
+  }
 }
 
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_not_supported_received() {
@@ -441,7 +481,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_event() {
   }
   if (currentEvents & (uint32_t)Notifications::TIMEOUT) {
     clearEvents();
-    if (postNotifcationEvalState >= PESinkHandleSoftReset && postNotifcationEvalState <= PESinkSendSoftResetResp) {
+    if (postNotificationEvalState >= PESinkHandleSoftReset && postNotificationEvalState <= PESinkSendSoftResetResp) {
       // Timeout in soft reset, so reset state machine
       return PESinkStartup;
     }
@@ -452,7 +492,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_event() {
   }
 
   if (currentEvents & waitingEventsMask) {
-    return postNotifcationEvalState;
+    return postNotificationEvalState;
   }
   return policy_engine_state::PEWaitingEvent;
 }
@@ -507,4 +547,44 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_send_done() {
   /* Silence the compiler warning */
   notify(Notifications::TX_ERR);
   return postSendFailedState;
+}
+
+PolicyEngine::policy_engine_state PolicyEngine::pe_sink_epr_eval_cap() {
+  if (pdbs_dpm_epr_evaluate_capability(&recent_epr_capabilities, &_last_dpm_request)) {
+    auto pps_index  = PD_RDO_OBJPOS_GET(&_last_dpm_request);
+    PPSTimerEnabled = (recent_epr_capabilities.obj[pps_index - 1] & PD_PDO_TYPE) == PD_PDO_TYPE_AUGMENTED && (recent_epr_capabilities.obj[pps_index - 1] & PD_APDO_TYPE) == PD_APDO_TYPE_PPS;
+    _last_dpm_request.hdr |= hdr_template;
+    return PESinkSelectCapTx;
+  } else {
+    return PESinkWaitCap;
+  }
+}
+
+PolicyEngine::policy_engine_state PolicyEngine::pe_sink_request_epr() {
+  pd_msg *epr_mode = &tempMessage;
+  epr_mode->hdr    = this->hdr_template | PD_MSGTYPE_EPR_MODE | PD_NUMOBJ(1);
+  epr_mode->obj[0] = (0x01 << PD_EPR_MODE_ACTION_SHIFT) | (epr_wattage << PD_EPR_MODE_DATA_SHIFT);
+  return pe_start_message_tx(PESinkReady, PESinkHardReset, epr_mode);
+}
+
+PolicyEngine::policy_engine_state PolicyEngine::pe_sink_send_epr_keep_alive() {
+  pd_msg* keepalive_message = &tempMessage;
+  keepalive_message->hdr = PD_HDR_EXT | this->hdr_template | PD_NUMOBJ(1) | PD_MSGTYPE_EXTENDED_CONTROL;
+  keepalive_message->exthdr = (PD_EXTHDR_DATA_SIZE & 2) << PD_EXTHDR_DATA_SIZE_SHIFT;
+  keepalive_message->data[0] = PD_EXTENDED_CONTROL_TYPE_EPR_KEEPALIVE;
+  keepalive_message->data[1] = PD_EXTENDED_CONTROL_DATA_UNUSED;
+  return pe_start_message_tx(PESinkWaitEPRKeepAliveAck, PESinkHardReset, keepalive_message);
+}
+
+PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_epr_keep_alive_ack() {
+  if (incomingMessages.getOccupied()) {
+    incomingMessages.pop(&tempMessage);
+    if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_EXTENDED_CONTROL && PD_DATA_SIZE_GET(&tempMessage) == 2 && tempMessage.data[0] == PD_EXTENDED_CONTROL_TYPE_EPR_KEEPALIVE_ACK && tempMessage.data[1] == PD_EXTENDED_CONTROL_DATA_UNUSED) {
+      return PESinkReady;
+    } else {
+      return PESinkSendSoftReset;
+    }
+  } else {
+    return PESinkWaitEPRKeepAliveAck;
+  }
 }

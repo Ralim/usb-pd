@@ -35,22 +35,25 @@ public:
    * Returns true if sufficient power is available, false otherwise.
    */
   typedef bool (*EvaluateCapabilityFunc)(const pd_msg *capabilities, pd_msg *request);
-
+  typedef bool (*EPREvaluateCapabilityFunc)(const epr_pd_msg *capabilities, pd_msg *request);
   /*
    * Create a Sink_Capabilities message for our current capabilities.
    */
   typedef void (*SinkCapabilityFunc)(pd_msg *cap, const bool isPD3);
   typedef uint32_t (*TimestampFunc)();
   typedef void (*DelayFunc)(uint32_t milliseconds);
-  PolicyEngine(FUSB302 fusbStruct, TimestampFunc getTimestampF, DelayFunc delayFuncF, SinkCapabilityFunc sinkCapabilities, EvaluateCapabilityFunc evalFunc)
+  PolicyEngine(FUSB302 fusbStruct, TimestampFunc getTimestampF, DelayFunc delayFuncF, SinkCapabilityFunc sinkCapabilities, EvaluateCapabilityFunc evalFunc, EPREvaluateCapabilityFunc eprEvalFunc)
       : fusb(fusbStruct),                               //
         getTimeStamp(getTimestampF),                    //
         pdbs_dpm_get_sink_capability(sinkCapabilities), //
         pdbs_dpm_evaluate_capability(evalFunc),         //
+        pdbs_dpm_epr_evaluate_capability(eprEvalFunc),  //
         osDelay(delayFuncF)                             //
   {
     hdr_template = PD_DATAROLE_UFP | PD_POWERROLE_SINK;
     _pps_index   = 0xFF;
+    epr_wattage = 0;
+    is_epr = false;
   };
   // Runs the internal thread, returns true if should re-run again immediately if possible
   bool thread();
@@ -79,8 +82,10 @@ public:
       return false;
     return _explicit_contract;
   }
-  // Call this periodically, by the spec at least once every 10 seconds. <5 is reccomended
-  void PPSTimerCallback();
+  bool pdIsEpr() { return is_epr; }
+  // Call this periodically, by the spec at least once every 10 seconds for PPS. <5 is recommended
+  // If in EPR should be called every 4-400 milliseconds
+  void TimersCallback();
 
   bool NegotiationTimeoutReached(uint8_t timeout);
 
@@ -89,22 +94,34 @@ public:
   // Useful for debug reading out
   int currentStateCode(const bool noWait = false) {
     if (noWait && (state == PEWaitingEvent)) {
-      return (int)postNotifcationEvalState;
+      return (int)postNotificationEvalState;
     }
     return (int)state;
   }
 
+  bool requestEpr(uint8_t chosen_wattage) {
+    if (epr_wattage != 0) {
+      // If we're in or have attempted to enter EPR, don't try to reenter
+      return false;
+    } else {
+      epr_wattage = chosen_wattage;
+      PolicyEngine::notify(Notifications::REQUEST_EPR);
+      return true;
+    }
+  } 
+
 private:
-  const FUSB302                fusb;
-  const TimestampFunc          getTimeStamp;
-  const SinkCapabilityFunc     pdbs_dpm_get_sink_capability;
-  const EvaluateCapabilityFunc pdbs_dpm_evaluate_capability;
-  const DelayFunc              osDelay;
-  int                          current_voltage_mv;   // The current voltage PD is expecting
-  int                          _requested_voltage;   // The voltage the unit wanted to requests
-  bool                         _unconstrained_power; // If the source is unconstrained
-  uint8_t                      _tx_messageidcounter; // Counter for messages sent to be packed into messages sent
-  uint16_t                     hdr_template;         /* PD message header template */
+  const FUSB302                   fusb;
+  const TimestampFunc             getTimeStamp;
+  const SinkCapabilityFunc        pdbs_dpm_get_sink_capability;
+  const EvaluateCapabilityFunc    pdbs_dpm_evaluate_capability;
+  const EPREvaluateCapabilityFunc pdbs_dpm_epr_evaluate_capability;
+  const DelayFunc                 osDelay;
+  int                             current_voltage_mv;   // The current voltage PD is expecting
+  int                             _requested_voltage;   // The voltage the unit wanted to requests
+  bool                            _unconstrained_power; // If the source is unconstrained
+  uint8_t                         _tx_messageidcounter; // Counter for messages sent to be packed into messages sent
+  uint16_t                        hdr_template;         /* PD message header template */
 
   /* Whether or not we have an explicit contract */
   bool _explicit_contract;
@@ -138,9 +155,13 @@ private:
     PESinkSendSoftResetTxOK    = 19, // Sending soft reset, waiting message tx
     PESinkSendSoftResetResp    = 20, // Soft reset waiting for response
     PESinkSendNotSupported     = 21, // Send a NACK message
-    PESinkChunkReceived        = 22, // On chunked (larger) message recieved
+    PESinkHandleEPRChunk       = 22, // A chunked EPR message received
     PESinkNotSupportedReceived = 23, // One of our messages was not supported
     PESinkSourceUnresponsive   = 24, // A resting state for a source that doesnt talk (aka no PD)
+    PESinkEPREvalCap           = 25, // Evaluating the source's provided EPR capabilities message
+    PESinkRequestEPR           = 26, // We're requesting the EPR capabilities
+    PESinkSendEPRKeepAlive     = 27, // Send the EPR Keep Alive packet
+    PESinkWaitEPRKeepAliveAck  = 28, // wait for the Source to acknowledge the keep alive
   } policy_engine_state;
   enum class Notifications {
     RESET          = EVENT_MASK(0),  // 1
@@ -155,11 +176,13 @@ private:
     I_TXSENT       = EVENT_MASK(9),  // 200
     I_RETRYFAIL    = EVENT_MASK(10), // 400
     TIMEOUT        = EVENT_MASK(11), // 800 Internal notification for timeout waiting for an event
-    ALL            = (EVENT_MASK(12) - 1),
+    REQUEST_EPR    = EVENT_MASK(12), // 1000
+    EPR_KEEPALIVE  = EVENT_MASK(13), // 2000
+    ALL            = (EVENT_MASK(14) - 1),
   };
   // Send a notification
   void                notify(Notifications notification);
-  policy_engine_state postNotifcationEvalState;
+  policy_engine_state postNotificationEvalState;
   policy_engine_state postSendState;
   policy_engine_state postSendFailedState;
   uint32_t            waitingEventsMask            = 0;
@@ -188,12 +211,16 @@ private:
   policy_engine_state pe_sink_send_soft_reset_tx_ok();
   policy_engine_state pe_sink_send_soft_reset();
   policy_engine_state pe_sink_send_not_supported();
-  policy_engine_state pe_sink_chunk_received();
+  policy_engine_state pe_sink_handle_epr_chunk();
   policy_engine_state pe_sink_not_supported_received();
   policy_engine_state pe_sink_source_unresponsive();
   policy_engine_state pe_sink_wait_event();
   policy_engine_state pe_sink_wait_send_done();
   policy_engine_state pe_sink_wait_good_crc();
+  policy_engine_state pe_sink_epr_eval_cap();
+  policy_engine_state pe_sink_request_epr();
+  policy_engine_state pe_sink_send_epr_keep_alive();
+  policy_engine_state pe_sink_wait_epr_keep_alive_ack();
   // Sending messages, starts send and returns next state
   policy_engine_state pe_start_message_tx(policy_engine_state postTxState, policy_engine_state txFailState, pd_msg *msg);
 
@@ -206,7 +233,10 @@ private:
   policy_engine_state   state = policy_engine_state::PESinkStartup;
   // Read a pending message into the temp message
   bool     PPSTimerEnabled;
-  uint32_t PPSTimeLastEvent;
+  uint32_t PPSTimeLastEvent, EPRTimeLastEvent;
+  epr_pd_msg            recent_epr_capabilities;
+  uint8_t epr_wattage;
+  bool is_epr;
 };
 
 #endif /* PDB_POLICY_ENGINE_H */

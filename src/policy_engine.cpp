@@ -54,9 +54,13 @@ void PolicyEngine::printStateName() {
       "PESinkSendSoftResetTxOK",
       "PESinkSendSoftResetResp",
       "PESinkSendNotSupported",
-      "PESinkChunkReceived",
+      "PESinkHandleEPRChunk",
       "PESinkNotSupportedReceived",
       "PESinkSourceUnresponsive",
+      "PESinkEPREvalCap",
+      "PESinkRequestEPR",
+      "PESinkSendEPRKeepAlive",
+      "PESinkWaitEPRKeepAliveAck"
   };
   printf("Current state - %s\r\n", names[(int)state]);
 #endif
@@ -121,8 +125,8 @@ bool PolicyEngine::thread() {
   case PESinkSendNotSupported:
     state = pe_sink_send_not_supported();
     break;
-  case PESinkChunkReceived:
-    state = pe_sink_chunk_received();
+  case PESinkHandleEPRChunk:
+    state = pe_sink_handle_epr_chunk();
     break;
   case PESinkSourceUnresponsive:
     state = pe_sink_source_unresponsive();
@@ -138,6 +142,18 @@ bool PolicyEngine::thread() {
     break;
   case PEWaitingMessageGoodCRC:
     state = pe_sink_wait_good_crc();
+    break;
+  case PESinkEPREvalCap:
+    state = pe_sink_epr_eval_cap();
+    break;
+  case PESinkRequestEPR:
+    state = pe_sink_request_epr();
+    break;
+  case PESinkSendEPRKeepAlive:
+    state = pe_sink_send_epr_keep_alive();
+    break;
+  case PESinkWaitEPRKeepAliveAck:
+    state = pe_sink_wait_epr_keep_alive_ack();
     break;
   default:
     state = PESinkStartup;
@@ -166,13 +182,20 @@ bool PolicyEngine::NegotiationTimeoutReached(uint8_t timeout) {
   return false;
 }
 
-void PolicyEngine::PPSTimerCallback() {
+void PolicyEngine::TimersCallback() {
   if (PPSTimerEnabled) {
     // Have to periodically re-send to keep the voltage level active
     if ((getTimeStamp() - PPSTimeLastEvent) > (1000)) {
       // Send a new PPS message
       PolicyEngine::notify(Notifications::PPS_REQUEST);
       PPSTimeLastEvent = getTimeStamp();
+    }
+  }
+  if (is_epr) {
+    // We need to engage in _some_ PD communication to stay in EPR mode
+    if ((getTimeStamp() - EPRTimeLastEvent) > (375)) {
+      PolicyEngine::notify(Notifications::EPR_KEEPALIVE);
+      EPRTimeLastEvent = getTimeStamp();
     }
   }
 }
@@ -227,7 +250,7 @@ PolicyEngine::policy_engine_state PolicyEngine::waitForEvent(PolicyEngine::polic
       return evalState;
     }
   }
-  postNotifcationEvalState = evalState;
+  postNotificationEvalState = evalState;
   if (timeout == 0xFFFFFFFF) {
     waitingEventsTimeout = 0xFFFFFFFF;
   } else {
