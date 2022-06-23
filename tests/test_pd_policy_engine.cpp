@@ -10,12 +10,13 @@
 TEST_GROUP(PD){};
 MockFUSB302 fusb_mock = MockFUSB302();
 // remap's for usin the Mock
-bool         i2c_read(const uint8_t deviceAddress, const uint8_t address, const uint8_t size, uint8_t *buf) { return fusb_mock.i2cRead(deviceAddress, address, size, buf); }
-bool         i2c_write(const uint8_t deviceAddress, const uint8_t address, const uint8_t size, uint8_t *buf) { return fusb_mock.i2cWrite(deviceAddress, address, size, buf); }
-auto         mock_delay     = [](uint32_t millis) {};
-auto         mock_timestamp = []() -> uint32_t { return 0; };
-FUSB302      fusb           = FUSB302(FUSB302B_ADDR, i2c_read, i2c_write, mock_delay);
-PolicyEngine pe             = PolicyEngine(fusb, mock_timestamp, mock_delay, pdbs_dpm_get_sink_capability, pdbs_dpm_evaluate_capability);
+bool    i2c_read(const uint8_t deviceAddress, const uint8_t address, const uint8_t size, uint8_t *buf) { return fusb_mock.i2cRead(deviceAddress, address, size, buf); }
+bool    i2c_write(const uint8_t deviceAddress, const uint8_t address, const uint8_t size, uint8_t *buf) { return fusb_mock.i2cWrite(deviceAddress, address, size, buf); }
+auto    mock_delay     = [](uint32_t millis) {};
+auto    mock_timestamp = []() -> uint32_t { return 0; };
+FUSB302 fusb           = FUSB302(FUSB302B_ADDR, i2c_read, i2c_write, mock_delay);
+
+PolicyEngine pe = PolicyEngine(fusb, mock_timestamp, mock_delay, pdbs_dpm_get_sink_capability, pdbs_dpm_evaluate_capability, EPREvaluateCapabilityFunc, 140);
 // Testing constants
 const uint8_t message_SOP1[]                 = {FUSB_FIFO_RX_SOP1, 0, 0, 1, 2, 3, 4};
 const uint8_t message_SOP2[]                 = {FUSB_FIFO_RX_SOP2, 0, 0, 1, 2, 3, 4};

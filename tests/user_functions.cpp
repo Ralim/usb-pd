@@ -82,6 +82,16 @@ bool pdbs_dpm_evaluate_capability(const pd_msg *capabilities, pd_msg *request) {
   return true;
 }
 
+bool EPREvaluateCapabilityFunc(const epr_pd_msg *capabilities, pd_msg *request) { /* Nothing matched (or no configuration), so get 5 V at low current */
+  request->hdr    = PD_MSGTYPE_EPR_REQUEST | PD_NUMOBJ(2);
+  request->obj[1] = capabilities->obj[0]; // Copy PDO into slot 2
+  request->obj[0] = PD_RDO_FV_MAX_CURRENT_SET(DPM_MIN_CURRENT) | PD_RDO_FV_CURRENT_SET(DPM_MIN_CURRENT) | PD_RDO_NO_USB_SUSPEND | PD_RDO_OBJPOS_SET(1);
+
+  request->obj[0] |= PD_RDO_EPR_CAPABLE;
+  // USB Data
+  request->obj[0] |= PD_RDO_USB_COMMS;
+  return true;
+}
 void pdbs_dpm_get_sink_capability(pd_msg *cap, const bool isPD3) {
   /* Keep track of how many PDOs we've added */
   int numobj = 0;
