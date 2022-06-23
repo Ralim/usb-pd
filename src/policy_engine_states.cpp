@@ -484,9 +484,9 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_handle_epr_chunk() {
     // Copy first message directly over the object to set header,ext-header + start of PDO's
     memcpy(&this->recent_epr_capabilities, &tempMessage.bytes, sizeof(tempMessage.bytes));
   } else {
-    memcpy(&(this->recent_epr_capabilities.data[chunk_index * (6 * 4)]), &tempMessage.data, (4 * (PD_NUMOBJ_GET(&tempMessage) - 1)));
+    memcpy(&(this->recent_epr_capabilities.data[chunk_index * (7 * 4)]), &tempMessage.data, (4 * (PD_NUMOBJ_GET(&tempMessage) - 1)));
   }
-  const auto recievedLength = (PD_MAX_EXT_MSG_CHUNK_LEN * chunk_index) /*Bytes Implicit by chunk index*/ + 2 /*Ext Header*/ + (4 * (PD_NUMOBJ_GET(&tempMessage) - 1) /* Data in this message*/);
+  const auto recievedLength = ((7 * 4) * chunk_index) /*Bytes Implicit by chunk index*/ + (4 * (PD_NUMOBJ_GET(&tempMessage) - 1) /* Data in this message*/);
   for (int i = 0; i < 11; i++) {
   }
 
