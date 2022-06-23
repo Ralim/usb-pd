@@ -125,6 +125,8 @@ bool PolicyEngine::thread() {
   case PESinkSendNotSupported:
     state = pe_sink_send_not_supported();
     break;
+  case PESinkWaitForHandleEPRChunk:
+    state = pe_sink_wait_epr_chunk();
   case PESinkHandleEPRChunk:
     state = pe_sink_handle_epr_chunk();
     break;
@@ -193,7 +195,7 @@ void PolicyEngine::TimersCallback() {
   }
   if (is_epr) {
     // We need to engage in _some_ PD communication to stay in EPR mode
-    if ((getTimeStamp() - EPRTimeLastEvent) > (375)) {
+    if ((getTimeStamp() - EPRTimeLastEvent) > (200)) {
       PolicyEngine::notify(Notifications::EPR_KEEPALIVE);
       EPRTimeLastEvent = getTimeStamp();
     }
