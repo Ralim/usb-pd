@@ -255,7 +255,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_ready() {
 
       /* Ignore vendor-defined messages */
       if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_VENDOR_DEFINED && PD_NUMOBJ_GET(&tempMessage) > 0) {
-        return waitForEvent(PESinkReady, (uint32_t)Notifications::ALL);
+        // return waitForEvent(PESinkReady, (uint32_t)Notifications::ALL);
         /* Ignore Ping messages */
       } else if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_PING && PD_NUMOBJ_GET(&tempMessage) == 0) {
         // return waitForEvent(PESinkReady, (uint32_t)Notifications::ALL);
