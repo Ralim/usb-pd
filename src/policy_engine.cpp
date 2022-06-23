@@ -215,12 +215,12 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_start_message_tx(PolicyEngine
   msg->hdr |= (_tx_messageidcounter % 8) << PD_HDR_MESSAGEID_SHIFT;
 
   /* PD 3.0 collision avoidance */
-  if (PolicyEngine::isPD3_0()) {
-    /* If we're starting an AMS, wait for permission to transmit */
-    //    while (fusb_get_typec_current() != fusb_sink_tx_ok) {
-    //      vTaskDelay(TICKS_10MS);
-    //    }
-  }
+  // if (PolicyEngine::isPD3_0()) {
+  //   /* If we're starting an AMS, wait for permission to transmit */
+  //   while (fusb.fusb_get_typec_current() != fusb_sink_tx_ok) {
+  //     osDelay(1);
+  //   }
+  // }
   /* Send the message to the PHY */
   fusb.fusb_send_message(msg);
 #ifdef PD_DEBUG_OUTPUT
