@@ -197,7 +197,6 @@ void PolicyEngine::TimersCallback() {
     // We need to engage in _some_ PD communication to stay in EPR mode
     if ((getTimeStamp() - EPRTimeLastEvent) > (200)) {
       PolicyEngine::notify(Notifications::EPR_KEEPALIVE);
-      EPRTimeLastEvent = getTimeStamp();
     }
   }
 }

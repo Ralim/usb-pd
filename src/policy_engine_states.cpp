@@ -258,7 +258,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_ready() {
         return waitForEvent(PESinkReady, (uint32_t)Notifications::ALL);
         /* Ignore Ping messages */
       } else if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_PING && PD_NUMOBJ_GET(&tempMessage) == 0) {
-        return waitForEvent(PESinkReady, (uint32_t)Notifications::ALL);
+        // return waitForEvent(PESinkReady, (uint32_t)Notifications::ALL);
         /* DR_Swap messages are not supported */
       } else if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_DR_SWAP && PD_NUMOBJ_GET(&tempMessage) == 0) {
         return PESinkSendNotSupported;
@@ -292,8 +292,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_ready() {
         /* PD 3.0 messges */
       } else if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_EPR_MODE && PD_NUMOBJ_GET(&tempMessage) > 0) {
         if (tempMessage.bytes[0] == 3) {
-          is_epr           = true;
-          EPRTimeLastEvent = getTimeStamp();
+          is_epr = true;
           // return PESinkReady;
           // We start off from here, but let the message read loop run until all are read
         } else if (tempMessage.bytes[0] == 4) {
@@ -591,6 +590,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_send_done() {
 }
 
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_epr_eval_cap() {
+  EPRTimeLastEvent = getTimeStamp();
   if (pdbs_dpm_epr_evaluate_capability(&recent_epr_capabilities, &_last_dpm_request)) {
     auto pps_index  = PD_RDO_OBJPOS_GET(&_last_dpm_request);
     PPSTimerEnabled = (recent_epr_capabilities.obj[pps_index - 1] & PD_PDO_TYPE) == PD_PDO_TYPE_AUGMENTED && (recent_epr_capabilities.obj[pps_index - 1] & PD_APDO_TYPE) == PD_APDO_TYPE_PPS;
@@ -602,6 +602,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_epr_eval_cap() {
 }
 
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_request_epr() {
+  EPRTimeLastEvent = getTimeStamp();
   pd_msg *epr_mode = &tempMessage;
   epr_mode->hdr    = this->hdr_template | PD_MSGTYPE_EPR_MODE | PD_NUMOBJ(1);
   epr_mode->obj[0] = (0x01 << PD_EPR_MODE_ACTION_SHIFT) | (device_epr_wattage << PD_EPR_MODE_DATA_SHIFT);
@@ -609,27 +610,26 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_request_epr() {
 }
 
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_send_epr_keep_alive() {
+  while (incomingMessages.getOccupied()) {
+    incomingMessages.pop(nullptr);
+  }
   negotiationOfEPRInProgress = true;
-  pd_msg *keepalive_message  = &tempMessage;
-  keepalive_message->hdr     = PD_HDR_EXT | this->hdr_template | PD_NUMOBJ(1) | PD_MSGTYPE_EXTENDED_CONTROL;
-  keepalive_message->exthdr  = (PD_EXTHDR_DATA_SIZE & 2) << PD_EXTHDR_DATA_SIZE_SHIFT;
-  keepalive_message->data[0] = PD_EXTENDED_CONTROL_TYPE_EPR_KEEPALIVE;
-  keepalive_message->data[1] = PD_EXTENDED_CONTROL_DATA_UNUSED;
-  return pe_start_message_tx(PESinkWaitEPRKeepAliveAck, PESinkHardReset, keepalive_message);
+  tempMessage.hdr            = PD_HDR_EXT | this->hdr_template | PD_NUMOBJ(1) | PD_MSGTYPE_EXTENDED_CONTROL;
+  tempMessage.exthdr         = (PD_EXTHDR_DATA_SIZE & 2) << PD_EXTHDR_DATA_SIZE_SHIFT;
+  tempMessage.data[0]        = PD_EXTENDED_CONTROL_TYPE_EPR_KEEPALIVE;
+  tempMessage.data[1]        = PD_EXTENDED_CONTROL_DATA_UNUSED;
+  return pe_start_message_tx(PESinkWaitEPRKeepAliveAck, PESinkReady, &tempMessage);
 }
 
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_epr_keep_alive_ack() {
-  if (incomingMessages.getOccupied()) {
+  // We want to wait for an ACK for the epr message
+  while (incomingMessages.getOccupied()) {
     incomingMessages.pop(&tempMessage);
-    if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_EXTENDED_CONTROL && PD_DATA_SIZE_GET(&tempMessage) == 2 && tempMessage.data[0] == PD_EXTENDED_CONTROL_TYPE_EPR_KEEPALIVE_ACK
-        && tempMessage.data[1] == PD_EXTENDED_CONTROL_DATA_UNUSED) {
+    if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_EXTENDED_CONTROL && tempMessage.data[0] == PD_EXTENDED_CONTROL_TYPE_EPR_KEEPALIVE_ACK) {
       negotiationOfEPRInProgress = false;
       EPRTimeLastEvent           = getTimeStamp();
       return PESinkReady;
-    } else {
-      return PESinkSendSoftReset;
     }
-  } else {
-    return PESinkWaitEPRKeepAliveAck;
   }
+  return PESinkSendEPRKeepAlive;
 }
