@@ -450,7 +450,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_send_not_supported() {
 
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_epr_chunk() {
   uint32_t evt = currentEvents;
-  clearEvents(0xFFFFFF);
+  clearEvents(evt);
   /* If we received a message */
   if (evt & (uint32_t)Notifications::MSG_RX) {
     while (incomingMessages.getOccupied()) {
