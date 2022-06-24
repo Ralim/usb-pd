@@ -120,9 +120,10 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_eval_cap() {
     _last_dpm_request.hdr |= hdr_template;
     /* If we're using PD 3.0 */
     if ((hdr_template & PD_HDR_SPECREV) == PD_SPECREV_3_0) {
-      /* If the request was for a PPS APDO, start time callbacks if not started
+      /* If the request was for a PPS, start time callbacks if not started
        */
-      if (PD_RDO_OBJPOS_GET(&_last_dpm_request) >= _pps_index) {
+      auto pdoPos = PD_RDO_OBJPOS_GET(&_last_dpm_request);
+      if (pdoPos < 7 && pdoPos >= _pps_index) {
         PPSTimerEnabled = true;
       } else {
         PPSTimerEnabled = false;
