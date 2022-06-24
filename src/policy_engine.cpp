@@ -31,41 +31,40 @@ void PolicyEngine::notify(PolicyEngine::Notifications notification) {
 }
 void PolicyEngine::printStateName() {
 #ifdef PD_DEBUG_OUTPUT
-  const char *names[] = {
-      "PEWaitingEvent",
-      "PEWaitingMessageTx",
-      "PEWaitingMessageGoodCRC",
-      "PESinkStartup",
-      "PESinkDiscovery",
-      "PESinkSetupWaitCap",
-      "PESinkWaitCap",
-      "PESinkEvalCap",
-      "PESinkSelectCapTx",
-      "PESinkSelectCap",
-      "PESinkWaitCapResp",
-      "PESinkTransitionSink",
-      "PESinkReady",
-      "PESinkGetSourceCap",
-      "PESinkGiveSinkCap",
-      "PESinkHardReset",
-      "PESinkTransitionDefault",
-      "PESinkSoftReset",
-      "PESinkSendSoftReset",
-      "PESinkSendSoftResetTxOK",
-      "PESinkSendSoftResetResp",
-      "PESinkSendNotSupported",
-      "PESinkHandleEPRChunk",
-      "PESinkNotSupportedReceived",
-      "PESinkSourceUnresponsive",
-      "PESinkEPREvalCap",
-      "PESinkRequestEPR",
-      "PESinkSendEPRKeepAlive",
-      "PESinkWaitEPRKeepAliveAck"
-  };
+  const char *names[] = {"PEWaitingEvent",
+                         "PEWaitingMessageTx",
+                         "PEWaitingMessageGoodCRC",
+                         "PESinkStartup",
+                         "PESinkDiscovery",
+                         "PESinkSetupWaitCap",
+                         "PESinkWaitCap",
+                         "PESinkEvalCap",
+                         "PESinkSelectCapTx",
+                         "PESinkSelectCap",
+                         "PESinkWaitCapResp",
+                         "PESinkTransitionSink",
+                         "PESinkReady",
+                         "PESinkGetSourceCap",
+                         "PESinkGiveSinkCap",
+                         "PESinkHardReset",
+                         "PESinkTransitionDefault",
+                         "PESinkSoftReset",
+                         "PESinkSendSoftReset",
+                         "PESinkSendSoftResetTxOK",
+                         "PESinkSendSoftResetResp",
+                         "PESinkSendNotSupported",
+                         "PESinkHandleEPRChunk",
+                         "PESinkNotSupportedReceived",
+                         "PESinkSourceUnresponsive",
+                         "PESinkEPREvalCap",
+                         "PESinkRequestEPR",
+                         "PESinkSendEPRKeepAlive",
+                         "PESinkWaitEPRKeepAliveAck"};
   printf("Current state - %s\r\n", names[(int)state]);
 #endif
 }
 bool PolicyEngine::thread() {
+  auto stateEnter = state;
   switch (state) {
 
   case PESinkStartup:
@@ -161,10 +160,12 @@ bool PolicyEngine::thread() {
     state = PESinkStartup;
     break;
   }
+#ifdef PD_DEBUG_OUTPUT
   if (state != PEWaitingEvent) {
     printStateName();
   }
-  return state != PEWaitingEvent;
+#endif
+  return (state != stateEnter) || (state != PEWaitingEvent);
 }
 
 bool PolicyEngine::isPD3_0() { return (hdr_template & PD_HDR_SPECREV) == PD_SPECREV_3_0; }
