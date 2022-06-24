@@ -137,7 +137,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_eval_cap() {
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_select_cap_tx() {
 
   /* Transmit the request */
-  clearEvents(0xFFFFFF); // clear all pending incase of an rx while prepping
+  // clearEvents(0xFFFFFF); // clear all pending incase of an rx while prepping
 
 #ifdef PD_DEBUG_OUTPUT
   printf("Sending desired capability\r\n");
