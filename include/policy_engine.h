@@ -89,7 +89,7 @@ public:
   bool pdHasNegotiated() {
     if (state == policy_engine_state::PESinkSourceUnresponsive)
       return false;
-    return !negotiationOfEPRInProgress && _explicit_contract;
+    return negotiationOfEPRInProgress || _explicit_contract;
   }
 
   bool pdIsEpr() { return is_epr; }
