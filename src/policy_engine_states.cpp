@@ -253,7 +253,6 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_ready() {
 
       incomingMessages.pop(&tempMessage);
 
-      /* Ignore vendor-defined messages */
       if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_VENDOR_DEFINED && PD_NUMOBJ_GET(&tempMessage) > 0) {
         // return waitForEvent(PESinkReady, (uint32_t)Notifications::ALL);
         /* Ignore Ping messages */
@@ -484,11 +483,9 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_handle_epr_chunk() {
     // Copy first message directly over the object to set header,ext-header + start of PDO's
     memcpy(&this->recent_epr_capabilities, &tempMessage.bytes, sizeof(tempMessage.bytes));
   } else {
-    memcpy(&(this->recent_epr_capabilities.data[chunk_index * (7 * 4)]), &tempMessage.data, (4 * (PD_NUMOBJ_GET(&tempMessage) - 1)));
+    memcpy(&(this->recent_epr_capabilities.data[chunk_index * PD_MAX_EXT_MSG_CHUNK_LEN]), &(tempMessage.data), 2 + (4 * (PD_NUMOBJ_GET(&tempMessage) - 1)));
   }
-  const auto recievedLength = ((7 * 4) * chunk_index) /*Bytes Implicit by chunk index*/ + (4 * (PD_NUMOBJ_GET(&tempMessage) - 1) /* Data in this message*/);
-  for (int i = 0; i < 11; i++) {
-  }
+  const auto recievedLength = (PD_MAX_EXT_MSG_CHUNK_LEN * chunk_index) /*Bytes Implicit by chunk index*/ + 2 /*half PDO*/ + (4 * (PD_NUMOBJ_GET(&tempMessage) - 1) /* Data in this message*/);
 
   if ((recievedLength) >= PD_DATA_SIZE_GET(&this->recent_epr_capabilities)) {
     return PESinkEPREvalCap;
@@ -545,7 +542,6 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_good_crc() {
     pd_msg goodcrc;
     /* Read the GoodCRC */
     incomingMessages.pop(&goodcrc);
-
     /* Check that the message is correct */
     if (PD_MSGTYPE_GET(&goodcrc) == PD_MSGTYPE_GOODCRC && PD_NUMOBJ_GET(&goodcrc) == 0 && PD_MESSAGEID_GET(&goodcrc) == _tx_messageidcounter) {
       /* Increment MessageIDCounter */
@@ -573,7 +569,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_send_done() {
     if (incomingMessages.getOccupied()) {
       return pe_sink_wait_good_crc();
     } else {
-      // No Good CRC has arrived, these should _normally_ come really fast, but users implementation may be lagging
+      // No Good CRC has arrived, these should _normally_ come really fast (100us), but users implementation may be lagging
       // Setup a callback for this state
       return waitForEvent(PEWaitingMessageGoodCRC, (uint32_t)Notifications::MSG_RX, 120);
     }
