@@ -240,7 +240,7 @@
  * PD Request Data Object
  */
 #define PD_RDO_OBJPOS_SHIFT            28
-#define PD_RDO_OBJPOS                  (0x7 << PD_RDO_OBJPOS_SHIFT)
+#define PD_RDO_OBJPOS                  (0xF << PD_RDO_OBJPOS_SHIFT)
 #define PD_RDO_GIVEBACK_SHIFT          27
 #define PD_RDO_GIVEBACK                (1 << PD_RDO_GIVEBACK_SHIFT)
 #define PD_RDO_CAP_MISMATCH_SHIFT      26
@@ -348,6 +348,7 @@
  * MO: milliohm
  */
 #define PD_MV2PRV(mv)  ((mv) / 20)
+#define PD_MV2APS(mv)  (((mv) / 25) & ~0b11)
 #define PD_MV2PDV(mv)  ((mv) / 50)
 #define PD_MV2PAV(mv)  ((mv) / 100)
 #define PD_PRV2MV(prv) ((prv)*20)
