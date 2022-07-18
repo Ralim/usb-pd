@@ -126,6 +126,7 @@ bool PolicyEngine::thread() {
     break;
   case PESinkWaitForHandleEPRChunk:
     state = pe_sink_wait_epr_chunk();
+    break;
   case PESinkHandleEPRChunk:
     state = pe_sink_handle_epr_chunk();
     break;
