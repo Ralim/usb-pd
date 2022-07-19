@@ -56,7 +56,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_setup_wait_cap() { //
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_cap() {
   /* Fetch a message from the protocol layer */
   uint32_t evt = currentEvents;
-  clearEvents();
+  clearEvents(evt);
 #ifdef PD_DEBUG_OUTPUT
   printf("Wait Cap Event %04X\r\n", (int)evt);
 #endif
@@ -113,15 +113,17 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_eval_cap() {
     }
   }
   _unconstrained_power = tempMessage.obj[0] & PD_PDO_SRC_FIXED_UNCONSTRAINED;
+  sourceIsEPRCapable   = tempMessage.obj[0] & PD_PDO_SRC_FIXED_EPR_CAPABLE;
 
   /* Ask the DPM what to request */
   if (pdbs_dpm_evaluate_capability(&tempMessage, &_last_dpm_request)) {
     _last_dpm_request.hdr |= hdr_template;
     /* If we're using PD 3.0 */
     if ((hdr_template & PD_HDR_SPECREV) == PD_SPECREV_3_0) {
-      /* If the request was for a PPS APDO, start time callbacks if not started
+      /* If the request was for a PPS, start time callbacks if not started
        */
-      if (PD_RDO_OBJPOS_GET(&_last_dpm_request) >= _pps_index) {
+      auto pdoPos = PD_RDO_OBJPOS_GET(&_last_dpm_request);
+      if (pdoPos < 7 && pdoPos >= _pps_index) {
         PPSTimerEnabled = true;
       } else {
         PPSTimerEnabled = false;
@@ -135,7 +137,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_eval_cap() {
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_select_cap_tx() {
 
   /* Transmit the request */
-  clearEvents(); // clear all pending incase of an rx while prepping
+  // clearEvents(0xFFFFFF); // clear all pending incase of an rx while prepping
 
 #ifdef PD_DEBUG_OUTPUT
   printf("Sending desired capability\r\n");
@@ -144,26 +146,31 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_select_cap_tx() {
 }
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_select_cap() {
   // Have transmitted the selected cap, transition to waiting for the response
-  clearEvents();
+  clearEvents(0xFFFFFF);
   // wait for a response
   return waitForEvent(PESinkWaitCapResp, (uint32_t)Notifications::MSG_RX | (uint32_t)Notifications::RESET | (uint32_t)Notifications::TIMEOUT, PD_T_SENDER_RESPONSE);
 }
 
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_cap_resp() {
   /* Wait for a response */
-  clearEvents();
+  clearEvents(0xFFFFFF);
 
   /* Get the response message */
   while (incomingMessages.getOccupied()) {
     incomingMessages.pop(&tempMessage);
     /* If the source accepted our request, wait for the new power message*/
-    if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_ACCEPT && PD_NUMOBJ_GET(&tempMessage) == 0) {
+    if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_ACCEPT) {
+
+      is_epr = (PD_NUMOBJ_GET(&_last_dpm_request) == 2);
+      if (is_epr) {
+        EPRTimeLastEvent = getTimeStamp();
+      }
       return waitForEvent(PESinkTransitionSink, (uint32_t)Notifications::MSG_RX | (uint32_t)Notifications::RESET, PD_T_PS_TRANSITION);
       /* If the message was a Soft_Reset, do the soft reset procedure */
-    } else if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_SOFT_RESET && PD_NUMOBJ_GET(&tempMessage) == 0) {
+    } else if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_SOFT_RESET) {
       return PESinkHandleSoftReset;
       /* If the message was Wait or Reject */
-    } else if ((PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_REJECT || PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_WAIT) && PD_NUMOBJ_GET(&tempMessage) == 0) {
+    } else if ((PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_REJECT || PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_WAIT)) {
 #ifdef PD_DEBUG_OUTPUT
       printf("Requested Capabilities Rejected\r\n");
 #endif
@@ -181,19 +188,28 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_cap_resp() {
 
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_transition_sink() {
   /* Wait for the PS_RDY message */
-  clearEvents();
+  clearEvents(0xFFFFFF);
   /* If we received a message, read it */
   while (incomingMessages.getOccupied()) {
 
     incomingMessages.pop(&tempMessage);
 
     /* If we got a PS_RDY, handle it */
-    if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_PS_RDY && PD_NUMOBJ_GET(&tempMessage) == 0) {
+    if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_PS_RDY) {
       /* We just finished negotiating an explicit contract */
-      _explicit_contract = true;
       /* Negotiation finished */
+      negotiationOfEPRInProgress = false;
+      if (sourceIsEPRCapable && (device_epr_wattage > 0) && !is_epr) {
+        // We have entered into an SPR contract, but we support EPR and the supply does too
+        //  Request entering EPR mode
+        negotiationOfEPRInProgress = true;
+        PolicyEngine::notify(Notifications::REQUEST_EPR);
+      }
+      _explicit_contract = true;
+
       return PESinkReady;
-      /* If there was a protocol error, send a hard reset */
+    } else if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_SOURCE_CAPABILITIES) {
+      return PESinkEvalCap;
     }
   }
   // Timeout
@@ -202,7 +218,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_transition_sink() {
 
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_ready() {
   uint32_t evt = currentEvents;
-  clearEvents();
+  clearEvents(evt);
   /* If SinkPPSPeriodicTimer ran out, send a new request */
   if (evt & (uint32_t)Notifications::PPS_REQUEST) {
     return PESinkSelectCapTx;
@@ -221,22 +237,28 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_ready() {
    * SelectCap, not EvalCap), but this works better with the particular
    * design of this firmware. */
   if (evt & (uint32_t)Notifications::NEW_POWER) {
-    /* Tell the protocol layer we're starting an AMS */
     return PESinkEvalCap;
+  }
+
+  if (evt & (uint32_t)Notifications::REQUEST_EPR) {
+    return PESinkRequestEPR;
+  }
+
+  if (evt & (uint32_t)Notifications::EPR_KEEPALIVE) {
+    return PESinkSendEPRKeepAlive;
   }
 
   /* If we received a message */
   if (evt & (uint32_t)Notifications::MSG_RX) {
-    if (incomingMessages.getOccupied()) {
+    while (incomingMessages.getOccupied()) {
 
       incomingMessages.pop(&tempMessage);
 
-      /* Ignore vendor-defined messages */
       if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_VENDOR_DEFINED && PD_NUMOBJ_GET(&tempMessage) > 0) {
-        return waitForEvent(PESinkReady, (uint32_t)Notifications::ALL);
+        // return waitForEvent(PESinkReady, (uint32_t)Notifications::ALL);
         /* Ignore Ping messages */
       } else if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_PING && PD_NUMOBJ_GET(&tempMessage) == 0) {
-        return waitForEvent(PESinkReady, (uint32_t)Notifications::ALL);
+        // return waitForEvent(PESinkReady, (uint32_t)Notifications::ALL);
         /* DR_Swap messages are not supported */
       } else if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_DR_SWAP && PD_NUMOBJ_GET(&tempMessage) == 0) {
         return PESinkSendNotSupported;
@@ -268,20 +290,35 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_ready() {
       } else if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_SOFT_RESET && PD_NUMOBJ_GET(&tempMessage) == 0) {
         return PESinkHandleSoftReset;
         /* PD 3.0 messges */
+      } else if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_EPR_MODE && PD_NUMOBJ_GET(&tempMessage) > 0) {
+        if (tempMessage.bytes[0] == 3) {
+          is_epr = true;
+          // return PESinkReady;
+          // We start off from here, but let the message read loop run until all are read
+        } else if (tempMessage.bytes[0] == 4) {
+          is_epr = false;
+          return PESinkReady;
+          // We attempted to enter EPR and failed, no need to renegotiate
+        } else if (tempMessage.bytes[0] == 5) {
+          is_epr = false;
+          return PESinkWaitCap; // We exited EPR so now need to renegotiate an SPR contract
+        }
       } else if ((hdr_template & PD_HDR_SPECREV) == PD_SPECREV_3_0) {
-        /* If the message is a multi-chunk extended message, let it
-         * time out. */
-        if ((tempMessage.hdr & PD_HDR_EXT) && (PD_DATA_SIZE_GET(&tempMessage) > PD_MAX_EXT_MSG_LEGACY_LEN)) {
+        /* If the message is a multi-chunk extended message */
+        if ((tempMessage.hdr & PD_HDR_EXT) && (PD_DATA_SIZE_GET(&tempMessage) >= PD_MAX_EXT_MSG_LEGACY_LEN)) {
 
-          return PESinkChunkReceived;
-          /* Tell the DPM a message we sent got a response of
-           * Not_Supported. */
+          if ((PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_EPR_SOURCE_CAPABILITIES)) {
+
+            return PESinkHandleEPRChunk;
+          } else {
+            // We can support _some_ chunked messages but not all
+            return PESinkSendNotSupported;
+          }
+          /* Tell the DPM a message we sent got a response of Not_Supported. */
         } else if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_NOT_SUPPORTED && PD_NUMOBJ_GET(&tempMessage) == 0) {
-
           return PESinkNotSupportedReceived;
           /* If we got an unknown message, send a soft reset */
         } else {
-
           return PESinkSendSoftReset;
         }
       }
@@ -371,7 +408,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_send_soft_reset_tx_ok() 
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_send_soft_reset_resp() {
 
   /* Wait for a response */
-  clearEvents();
+  clearEvents(0xFFFFFF);
 
   /* Get the response message */
   if (incomingMessages.getOccupied()) {
@@ -411,12 +448,53 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_send_not_supported() {
   return pe_start_message_tx(PESinkReady, PESinkSendSoftReset, &tempMessage);
 }
 
-PolicyEngine::policy_engine_state PolicyEngine::pe_sink_chunk_received() {
+PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_epr_chunk() {
+  uint32_t evt = currentEvents;
+  clearEvents(evt);
+  /* If we received a message */
+  if (evt & (uint32_t)Notifications::MSG_RX) {
+    while (incomingMessages.getOccupied()) {
+      incomingMessages.pop(&tempMessage);
 
-  /* Wait for tChunkingNotSupported */
-  osDelay(PD_T_CHUNKING_NOT_SUPPORTED);
+      if ((hdr_template & PD_HDR_SPECREV) == PD_SPECREV_3_0) {
+        /* If the message is a multi-chunk extended message */
+        if ((tempMessage.hdr & PD_HDR_EXT) && (PD_DATA_SIZE_GET(&tempMessage) >= PD_MAX_EXT_MSG_LEGACY_LEN)) {
+          if ((PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_EPR_SOURCE_CAPABILITIES)) {
+            return PESinkHandleEPRChunk;
+          } else {
+            // We can support _some_ chunked messages but not all
+            return PESinkSendNotSupported;
+          }
+          /* Tell the DPM a message we sent got a response of Not_Supported. */
+        }
+      }
+    }
+  }
 
-  return PESinkSendNotSupported;
+  return waitForEvent(PESinkWaitForHandleEPRChunk, (uint32_t)Notifications::ALL, 0xFFFFFFFF);
+}
+
+PolicyEngine::policy_engine_state PolicyEngine::pe_sink_handle_epr_chunk() {
+  if (tempMessage.exthdr & PD_EXTHDR_REQUEST_CHUNK) {
+    return waitForEvent(PESinkWaitForHandleEPRChunk, (uint32_t)Notifications::ALL, 0xFFFFFFFF);
+  }
+  uint8_t chunk_index = PD_CHUNK_NUMBER_GET(&tempMessage);
+
+  if (chunk_index == 0) {
+    // Copy first message directly over the object to set header,ext-header + start of PDO's
+    memcpy(&this->recent_epr_capabilities, &tempMessage.bytes, sizeof(tempMessage.bytes));
+  } else {
+    memcpy(&(this->recent_epr_capabilities.data[chunk_index * PD_MAX_EXT_MSG_CHUNK_LEN]), &(tempMessage.data), 2 + (4 * (PD_NUMOBJ_GET(&tempMessage) - 1)));
+  }
+  const auto recievedLength = (PD_MAX_EXT_MSG_CHUNK_LEN * chunk_index) /*Bytes Implicit by chunk index*/ + 2 /*half PDO*/ + (4 * (PD_NUMOBJ_GET(&tempMessage) - 1) /* Data in this message*/);
+
+  if ((recievedLength) >= PD_DATA_SIZE_GET(&this->recent_epr_capabilities)) {
+    return PESinkEPREvalCap;
+  }
+
+  tempMessage.hdr    = this->hdr_template | (tempMessage.hdr & PD_HDR_MSGTYPE) | PD_NUMOBJ(1) | PD_HDR_EXT;
+  tempMessage.exthdr = ((chunk_index + 1) << PD_EXTHDR_CHUNK_NUMBER_SHIFT) | PD_EXTHDR_REQUEST_CHUNK | PD_EXTHDR_CHUNKED;
+  return pe_start_message_tx(PESinkWaitForHandleEPRChunk, PESinkHardReset, &tempMessage);
 }
 
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_not_supported_received() {
@@ -440,8 +518,8 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_event() {
     notify(Notifications::TIMEOUT);
   }
   if (currentEvents & (uint32_t)Notifications::TIMEOUT) {
-    clearEvents();
-    if (postNotifcationEvalState >= PESinkHandleSoftReset && postNotifcationEvalState <= PESinkSendSoftResetResp) {
+    clearEvents(0xFFFFFF);
+    if (postNotificationEvalState >= PESinkHandleSoftReset && postNotificationEvalState <= PESinkSendSoftResetResp) {
       // Timeout in soft reset, so reset state machine
       return PESinkStartup;
     }
@@ -452,20 +530,19 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_event() {
   }
 
   if (currentEvents & waitingEventsMask) {
-    return postNotifcationEvalState;
+    return postNotificationEvalState;
   }
   return policy_engine_state::PEWaitingEvent;
 }
 
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_good_crc() {
-  clearEvents();
+  clearEvents(0xFFFFFF);
 
-  if (incomingMessages.getOccupied()) {
+  while (incomingMessages.getOccupied()) {
     // Wait for the Good CRC
     pd_msg goodcrc;
     /* Read the GoodCRC */
     incomingMessages.pop(&goodcrc);
-
     /* Check that the message is correct */
     if (PD_MSGTYPE_GET(&goodcrc) == PD_MSGTYPE_GOODCRC && PD_NUMOBJ_GET(&goodcrc) == 0 && PD_MESSAGEID_GET(&goodcrc) == _tx_messageidcounter) {
       /* Increment MessageIDCounter */
@@ -485,7 +562,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_send_done() {
 
   /* Waiting for response*/
   uint32_t evt = currentEvents;
-  clearEvents();
+  clearEvents(evt);
 
   /* If the message was sent successfully */
   if ((uint32_t)evt & (uint32_t)Notifications::I_TXSENT) {
@@ -493,7 +570,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_send_done() {
     if (incomingMessages.getOccupied()) {
       return pe_sink_wait_good_crc();
     } else {
-      // No Good CRC has arrived, these should _normally_ come really fast, but users implementation may be lagging
+      // No Good CRC has arrived, these should _normally_ come really fast (100us), but users implementation may be lagging
       // Setup a callback for this state
       return waitForEvent(PEWaitingMessageGoodCRC, (uint32_t)Notifications::MSG_RX, 120);
     }
@@ -507,4 +584,49 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_send_done() {
   /* Silence the compiler warning */
   notify(Notifications::TX_ERR);
   return postSendFailedState;
+}
+
+PolicyEngine::policy_engine_state PolicyEngine::pe_sink_epr_eval_cap() {
+  EPRTimeLastEvent = getTimeStamp();
+  if (pdbs_dpm_epr_evaluate_capability(&recent_epr_capabilities, &_last_dpm_request)) {
+    auto pps_index  = PD_RDO_OBJPOS_GET(&_last_dpm_request);
+    PPSTimerEnabled = (recent_epr_capabilities.obj[pps_index - 1] & PD_PDO_TYPE) == PD_PDO_TYPE_AUGMENTED && (recent_epr_capabilities.obj[pps_index - 1] & PD_APDO_TYPE) == PD_APDO_TYPE_PPS;
+    _last_dpm_request.hdr |= hdr_template;
+    return PESinkSelectCapTx;
+  } else {
+    return PESinkWaitCap;
+  }
+}
+
+PolicyEngine::policy_engine_state PolicyEngine::pe_sink_request_epr() {
+  EPRTimeLastEvent = getTimeStamp();
+  pd_msg *epr_mode = &tempMessage;
+  epr_mode->hdr    = this->hdr_template | PD_MSGTYPE_EPR_MODE | PD_NUMOBJ(1);
+  epr_mode->obj[0] = (0x01 << PD_EPR_MODE_ACTION_SHIFT) | (device_epr_wattage << PD_EPR_MODE_DATA_SHIFT);
+  return pe_start_message_tx(PESinkReady, PESinkHardReset, epr_mode);
+}
+
+PolicyEngine::policy_engine_state PolicyEngine::pe_sink_send_epr_keep_alive() {
+  while (incomingMessages.getOccupied()) {
+    incomingMessages.pop(nullptr);
+  }
+  negotiationOfEPRInProgress = true;
+  tempMessage.hdr            = PD_HDR_EXT | this->hdr_template | PD_NUMOBJ(1) | PD_MSGTYPE_EXTENDED_CONTROL;
+  tempMessage.exthdr         = (PD_EXTHDR_DATA_SIZE & 2) << PD_EXTHDR_DATA_SIZE_SHIFT;
+  tempMessage.data[0]        = PD_EXTENDED_CONTROL_TYPE_EPR_KEEPALIVE;
+  tempMessage.data[1]        = PD_EXTENDED_CONTROL_DATA_UNUSED;
+  return pe_start_message_tx(PESinkWaitEPRKeepAliveAck, PESinkReady, &tempMessage);
+}
+
+PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_epr_keep_alive_ack() {
+  // We want to wait for an ACK for the epr message
+  while (incomingMessages.getOccupied()) {
+    incomingMessages.pop(&tempMessage);
+    if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_EXTENDED_CONTROL && tempMessage.data[0] == PD_EXTENDED_CONTROL_TYPE_EPR_KEEPALIVE_ACK) {
+      negotiationOfEPRInProgress = false;
+      EPRTimeLastEvent           = getTimeStamp();
+      return PESinkReady;
+    }
+  }
+  return PESinkSendEPRKeepAlive;
 }

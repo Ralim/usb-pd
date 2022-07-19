@@ -31,37 +31,40 @@ void PolicyEngine::notify(PolicyEngine::Notifications notification) {
 }
 void PolicyEngine::printStateName() {
 #ifdef PD_DEBUG_OUTPUT
-  const char *names[] = {
-      "PEWaitingEvent",
-      "PEWaitingMessageTx",
-      "PEWaitingMessageGoodCRC",
-      "PESinkStartup",
-      "PESinkDiscovery",
-      "PESinkSetupWaitCap",
-      "PESinkWaitCap",
-      "PESinkEvalCap",
-      "PESinkSelectCapTx",
-      "PESinkSelectCap",
-      "PESinkWaitCapResp",
-      "PESinkTransitionSink",
-      "PESinkReady",
-      "PESinkGetSourceCap",
-      "PESinkGiveSinkCap",
-      "PESinkHardReset",
-      "PESinkTransitionDefault",
-      "PESinkSoftReset",
-      "PESinkSendSoftReset",
-      "PESinkSendSoftResetTxOK",
-      "PESinkSendSoftResetResp",
-      "PESinkSendNotSupported",
-      "PESinkChunkReceived",
-      "PESinkNotSupportedReceived",
-      "PESinkSourceUnresponsive",
-  };
+  const char *names[] = {"PEWaitingEvent",
+                         "PEWaitingMessageTx",
+                         "PEWaitingMessageGoodCRC",
+                         "PESinkStartup",
+                         "PESinkDiscovery",
+                         "PESinkSetupWaitCap",
+                         "PESinkWaitCap",
+                         "PESinkEvalCap",
+                         "PESinkSelectCapTx",
+                         "PESinkSelectCap",
+                         "PESinkWaitCapResp",
+                         "PESinkTransitionSink",
+                         "PESinkReady",
+                         "PESinkGetSourceCap",
+                         "PESinkGiveSinkCap",
+                         "PESinkHardReset",
+                         "PESinkTransitionDefault",
+                         "PESinkSoftReset",
+                         "PESinkSendSoftReset",
+                         "PESinkSendSoftResetTxOK",
+                         "PESinkSendSoftResetResp",
+                         "PESinkSendNotSupported",
+                         "PESinkHandleEPRChunk",
+                         "PESinkNotSupportedReceived",
+                         "PESinkSourceUnresponsive",
+                         "PESinkEPREvalCap",
+                         "PESinkRequestEPR",
+                         "PESinkSendEPRKeepAlive",
+                         "PESinkWaitEPRKeepAliveAck"};
   printf("Current state - %s\r\n", names[(int)state]);
 #endif
 }
 bool PolicyEngine::thread() {
+  auto stateEnter = state;
   switch (state) {
 
   case PESinkStartup:
@@ -121,8 +124,11 @@ bool PolicyEngine::thread() {
   case PESinkSendNotSupported:
     state = pe_sink_send_not_supported();
     break;
-  case PESinkChunkReceived:
-    state = pe_sink_chunk_received();
+  case PESinkWaitForHandleEPRChunk:
+    state = pe_sink_wait_epr_chunk();
+    break;
+  case PESinkHandleEPRChunk:
+    state = pe_sink_handle_epr_chunk();
     break;
   case PESinkSourceUnresponsive:
     state = pe_sink_source_unresponsive();
@@ -139,14 +145,28 @@ bool PolicyEngine::thread() {
   case PEWaitingMessageGoodCRC:
     state = pe_sink_wait_good_crc();
     break;
+  case PESinkEPREvalCap:
+    state = pe_sink_epr_eval_cap();
+    break;
+  case PESinkRequestEPR:
+    state = pe_sink_request_epr();
+    break;
+  case PESinkSendEPRKeepAlive:
+    state = pe_sink_send_epr_keep_alive();
+    break;
+  case PESinkWaitEPRKeepAliveAck:
+    state = pe_sink_wait_epr_keep_alive_ack();
+    break;
   default:
     state = PESinkStartup;
     break;
   }
+#ifdef PD_DEBUG_OUTPUT
   if (state != PEWaitingEvent) {
     printStateName();
   }
-  return state != PEWaitingEvent;
+#endif
+  return (state != stateEnter) || (state != PEWaitingEvent);
 }
 
 bool PolicyEngine::isPD3_0() { return (hdr_template & PD_HDR_SPECREV) == PD_SPECREV_3_0; }
@@ -166,13 +186,19 @@ bool PolicyEngine::NegotiationTimeoutReached(uint8_t timeout) {
   return false;
 }
 
-void PolicyEngine::PPSTimerCallback() {
+void PolicyEngine::TimersCallback() {
   if (PPSTimerEnabled) {
     // Have to periodically re-send to keep the voltage level active
     if ((getTimeStamp() - PPSTimeLastEvent) > (1000)) {
       // Send a new PPS message
       PolicyEngine::notify(Notifications::PPS_REQUEST);
       PPSTimeLastEvent = getTimeStamp();
+    }
+  }
+  if (is_epr) {
+    // We need to engage in _some_ PD communication to stay in EPR mode
+    if ((getTimeStamp() - EPRTimeLastEvent) > (200)) {
+      PolicyEngine::notify(Notifications::EPR_KEEPALIVE);
     }
   }
 }
@@ -191,12 +217,12 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_start_message_tx(PolicyEngine
   msg->hdr |= (_tx_messageidcounter % 8) << PD_HDR_MESSAGEID_SHIFT;
 
   /* PD 3.0 collision avoidance */
-  if (PolicyEngine::isPD3_0()) {
-    /* If we're starting an AMS, wait for permission to transmit */
-    //    while (fusb_get_typec_current() != fusb_sink_tx_ok) {
-    //      vTaskDelay(TICKS_10MS);
-    //    }
-  }
+  // if (PolicyEngine::isPD3_0()) {
+  //   /* If we're starting an AMS, wait for permission to transmit */
+  //   while (fusb.fusb_get_typec_current() != fusb_sink_tx_ok) {
+  //     osDelay(1);
+  //   }
+  // }
   /* Send the message to the PHY */
   fusb.fusb_send_message(msg);
 #ifdef PD_DEBUG_OUTPUT
@@ -204,7 +230,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_start_message_tx(PolicyEngine
 #endif
 
   // Setup waiting for notification
-  return waitForEvent(PEWaitingMessageTx, (uint32_t)Notifications::RESET | (uint32_t)Notifications::I_TXSENT | (uint32_t)Notifications::I_RETRYFAIL, 0xFFFFFFFF);
+  return waitForEvent(PEWaitingMessageTx, (uint32_t)Notifications::RESET | (uint32_t)Notifications::MSG_RX | (uint32_t)Notifications::I_TXSENT | (uint32_t)Notifications::I_RETRYFAIL, 0xFFFFFFFF);
 }
 
 void PolicyEngine::clearEvents(uint32_t notification) { currentEvents &= ~notification; }
@@ -227,7 +253,7 @@ PolicyEngine::policy_engine_state PolicyEngine::waitForEvent(PolicyEngine::polic
       return evalState;
     }
   }
-  postNotifcationEvalState = evalState;
+  postNotificationEvalState = evalState;
   if (timeout == 0xFFFFFFFF) {
     waitingEventsTimeout = 0xFFFFFFFF;
   } else {
