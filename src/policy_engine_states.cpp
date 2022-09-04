@@ -491,7 +491,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_handle_epr_chunk() {
   if ((recievedLength) >= PD_DATA_SIZE_GET(&this->recent_epr_capabilities)) {
     return PESinkEPREvalCap;
   }
-
+  memset(tempMessage.data,0,sizeof(tempMessage.data));
   tempMessage.hdr    = this->hdr_template | (tempMessage.hdr & PD_HDR_MSGTYPE) | PD_NUMOBJ(1) | PD_HDR_EXT;
   tempMessage.exthdr = ((chunk_index + 1) << PD_EXTHDR_CHUNK_NUMBER_SHIFT) | PD_EXTHDR_REQUEST_CHUNK | PD_EXTHDR_CHUNKED;
   return pe_start_message_tx(PESinkWaitForHandleEPRChunk, PESinkHardReset, &tempMessage);
