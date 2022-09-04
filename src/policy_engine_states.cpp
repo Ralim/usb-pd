@@ -612,7 +612,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_send_epr_keep_alive() {
   }
   negotiationOfEPRInProgress = true;
   tempMessage.hdr            = PD_HDR_EXT | this->hdr_template | PD_NUMOBJ(1) | PD_MSGTYPE_EXTENDED_CONTROL;
-  tempMessage.exthdr         = (PD_EXTHDR_DATA_SIZE & 2) << PD_EXTHDR_DATA_SIZE_SHIFT;
+  tempMessage.exthdr         = (PD_EXTHDR_DATA_SIZE & 2) << PD_EXTHDR_DATA_SIZE_SHIFT | PD_EXTHDR_CHUNKED;
   tempMessage.data[0]        = PD_EXTENDED_CONTROL_TYPE_EPR_KEEPALIVE;
   tempMessage.data[1]        = PD_EXTENDED_CONTROL_DATA_UNUSED;
   return pe_start_message_tx(PESinkWaitEPRKeepAliveAck, PESinkReady, &tempMessage);
