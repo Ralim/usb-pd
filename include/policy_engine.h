@@ -109,6 +109,8 @@ public:
     return (int)state;
   }
 
+  inline void renegotiate() { notify(Notifications::NEW_POWER); }
+
 private:
   const FUSB302                   fusb;
   const TimestampFunc             getTimeStamp;
