@@ -123,7 +123,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_eval_cap() {
       /* If the request was for a PPS, start time callbacks if not started
        */
       auto pdoPos = PD_RDO_OBJPOS_GET(&_last_dpm_request);
-      if (pdoPos < 7 && pdoPos >= _pps_index) {
+      if (pdoPos <= 7 && pdoPos >= _pps_index) {
         PPSTimerEnabled = true;
       } else {
         PPSTimerEnabled = false;
