@@ -11,7 +11,7 @@ As part of this, some logic that was originally in the PD Buddy firmware has bee
 
 ## Features supported
 
-- PD 2.0 / PD 3.0
+- PD 2.0 / PD 3.0 / PD 3.1 (EPR)
 - - PPS requesting dynamic voltage
 - Re-request a voltage change on the fly
 
