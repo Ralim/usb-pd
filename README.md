@@ -1,3 +1,5 @@
+![Custom badge](https://img.shields.io/endpoint?url=https%3A%2F%2Fhits.dwyl.com%2Fralim%2Fusb-pd.json)
+
 # usb-pd
 
 USB-PD driver stack for the FUSB302.
