@@ -1,4 +1,4 @@
-[![HitCount](https://hits.dwyl.com/ralim/usb-pd.svg?style=flat-square)](http://hits.dwyl.com/ralim/usb-pd)
+[![HitCounter](https://hits.dwyl.com/ralim/usb-pd.svg?style=flat-square)](http://hits.dwyl.com/ralim/usb-pd)
 # usb-pd
 
 USB-PD driver stack for the FUSB302.
