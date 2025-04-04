@@ -23,6 +23,14 @@
 #include <cstring>
 #include <stdint.h>
 
+#ifdef TICK_IS_64_BIT
+#define TICK_TYPE uint64_t
+#define TICK_MAX_DELAY 0xFFFFFFFFFFFFFFFF
+#else
+#define TICK_TYPE uint32_t
+#define TICK_MAX_DELAY 0xFFFFFFFF
+#endif
+
 #define EVENT_MASK(x) (1 << x)
 class PolicyEngine {
 public:
@@ -40,8 +48,8 @@ public:
    * Create a Sink_Capabilities message for our current capabilities.
    */
   typedef void (*SinkCapabilityFunc)(pd_msg *cap, const bool isPD3);
-  typedef uint32_t (*TimestampFunc)();
-  typedef void (*DelayFunc)(uint32_t milliseconds);
+  typedef TICK_TYPE (*TimestampFunc)();
+  typedef void (*DelayFunc)(TICK_TYPE milliseconds);
   PolicyEngine(FUSB302                   fusbStruct,       //
                TimestampFunc             getTimestampF,    //
                DelayFunc                 delayFuncF,       //
@@ -189,11 +197,11 @@ private:
   policy_engine_state postSendState;
   policy_engine_state postSendFailedState;
   uint32_t            waitingEventsMask            = 0;
-  uint32_t            waitingEventsTimeout         = 0;
+  TICK_TYPE            waitingEventsTimeout         = 0;
   uint32_t            currentEvents                = 0;
-  uint32_t            timestampNegotiationsStarted = 0;
+  TICK_TYPE            timestampNegotiationsStarted = 0;
   void                clearEvents(uint32_t notification);
-  policy_engine_state waitForEvent(policy_engine_state evalState, uint32_t notification, uint32_t timeout = 0xFFFFFFFF);
+  policy_engine_state waitForEvent(policy_engine_state evalState, uint32_t notification, TICK_TYPE timeout = TICK_MAX_DELAY);
 
   policy_engine_state pe_sink_startup();
   policy_engine_state pe_sink_discovery();
@@ -237,7 +245,7 @@ private:
   policy_engine_state   state = policy_engine_state::PESinkStartup;
   // Read a pending message into the temp message
   bool       PPSTimerEnabled;
-  uint32_t   PPSTimeLastEvent, EPRTimeLastEvent;
+  TICK_TYPE   PPSTimeLastEvent, EPRTimeLastEvent;
   epr_pd_msg recent_epr_capabilities;
   uint8_t    device_epr_wattage;
   bool       sourceIsEPRCapable;
