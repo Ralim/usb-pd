@@ -179,7 +179,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_cap_resp() {
         return PESinkSetupWaitCap;
         /* If we do have an explicit contract, go to the ready state */
       } else {
-        return waitForEvent(PESinkReady, (uint32_t)Notifications::ALL, 0xFFFFFFFF);
+        return waitForEvent(PESinkReady, (uint32_t)Notifications::ALL, TICK_MAX_DELAY);
       }
     }
   }
@@ -325,7 +325,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_ready() {
     }
   }
 
-  return waitForEvent(PESinkReady, (uint32_t)Notifications::ALL, 0xFFFFFFFF);
+  return waitForEvent(PESinkReady, (uint32_t)Notifications::ALL, TICK_MAX_DELAY);
 }
 
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_get_source_cap() {
@@ -471,12 +471,12 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_epr_chunk() {
     }
   }
 
-  return waitForEvent(PESinkWaitForHandleEPRChunk, (uint32_t)Notifications::ALL, 0xFFFFFFFF);
+  return waitForEvent(PESinkWaitForHandleEPRChunk, (uint32_t)Notifications::ALL, TICK_MAX_DELAY);
 }
 
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_handle_epr_chunk() {
   if (tempMessage.exthdr & PD_EXTHDR_REQUEST_CHUNK) {
-    return waitForEvent(PESinkWaitForHandleEPRChunk, (uint32_t)Notifications::ALL, 0xFFFFFFFF);
+    return waitForEvent(PESinkWaitForHandleEPRChunk, (uint32_t)Notifications::ALL, TICK_MAX_DELAY);
   }
   uint8_t chunk_index = PD_CHUNK_NUMBER_GET(&tempMessage);
 
@@ -501,7 +501,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_not_supported_received()
   /* Inform the Device Policy Manager that we received a Not_Supported
    * message. */
 
-  return waitForEvent(PESinkReady, (uint32_t)Notifications::ALL, 0xFFFFFFFF);
+  return waitForEvent(PESinkReady, (uint32_t)Notifications::ALL, TICK_MAX_DELAY);
 }
 
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_source_unresponsive() {
