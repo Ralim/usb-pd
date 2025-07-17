@@ -232,12 +232,9 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_ready() {
   if (evt & (uint32_t)Notifications::GET_SOURCE_CAP) {
     return PESinkGetSourceCap;
   }
-  /* If the DPM wants new power, let it figure out what power it wants
-   * exactly.  This isn't exactly the transition from the spec (that would be
-   * SelectCap, not EvalCap), but this works better with the particular
-   * design of this firmware. */
+  /* Request the source sends us its current capabilities again */
   if (evt & (uint32_t)Notifications::NEW_POWER) {
-    return PESinkEvalCap;
+    return PESinkGetSourceCap;
   }
 
   if (evt & (uint32_t)Notifications::REQUEST_EPR) {
@@ -491,7 +488,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_handle_epr_chunk() {
   if ((recievedLength) >= PD_DATA_SIZE_GET(&this->recent_epr_capabilities)) {
     return PESinkEPREvalCap;
   }
-  memset(tempMessage.data,0,sizeof(tempMessage.data));
+  memset(tempMessage.data, 0, sizeof(tempMessage.data));
   tempMessage.hdr    = this->hdr_template | (tempMessage.hdr & PD_HDR_MSGTYPE) | PD_NUMOBJ(1) | PD_HDR_EXT;
   tempMessage.exthdr = ((chunk_index + 1) << PD_EXTHDR_CHUNK_NUMBER_SHIFT) | PD_EXTHDR_REQUEST_CHUNK | PD_EXTHDR_CHUNKED;
   return pe_start_message_tx(PESinkWaitForHandleEPRChunk, PESinkHardReset, &tempMessage);
