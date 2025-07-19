@@ -239,7 +239,7 @@ private:
   // Event group
   // Temp messages for storage
   pd_msg                tempMessage;
-  ringbuffer<pd_msg, 4> incomingMessages;
+  ringbuffer<pd_msg, 8> incomingMessages;
   pd_msg                irqMessage; // irq will unpack recieved message to here
   pd_msg                _last_dpm_request;
   policy_engine_state   state = policy_engine_state::PESinkStartup;
