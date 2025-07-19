@@ -314,9 +314,9 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_ready() {
           /* Tell the DPM a message we sent got a response of Not_Supported. */
         } else if (PD_MSGTYPE_GET(&tempMessage) == PD_MSGTYPE_NOT_SUPPORTED && PD_NUMOBJ_GET(&tempMessage) == 0) {
           return PESinkNotSupportedReceived;
-          /* If we got an unknown message, send a soft reset */
+          /* If we got an unknown message, Send Not Supported back */
         } else {
-          return PESinkSendSoftReset;
+          return PESinkSendNotSupported;
         }
       }
     }
@@ -544,12 +544,8 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_good_crc() {
     if (PD_MSGTYPE_GET(&goodcrc) == PD_MSGTYPE_GOODCRC && PD_NUMOBJ_GET(&goodcrc) == 0 && PD_MESSAGEID_GET(&goodcrc) == _tx_messageidcounter) {
       /* Increment MessageIDCounter */
       _tx_messageidcounter = (_tx_messageidcounter + 1) % 8;
-
       notify(Notifications::TX_DONE);
       return postSendState;
-    } else {
-      notify(Notifications::TX_ERR);
-      return postSendFailedState;
     }
   }
   notify(Notifications::TX_ERR);
