@@ -625,5 +625,6 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_epr_keep_alive_ack(
       return PESinkReady;
     }
   }
-  return PESinkSendEPRKeepAlive;
+  // Retry for ack
+  return PESinkWaitEPRKeepAliveAck;
 }
