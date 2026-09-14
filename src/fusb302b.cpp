@@ -152,40 +152,26 @@ bool FUSB302::fusb_setup() const {
 }
 
 bool FUSB302::runCCLineSelection() const {
+  /* Poll CC1 and CC2 until one of them is live */
+  bool measuringCC1 = true;
 
-  /* Measure CC1 */
-  if (!fusb_write_byte(FUSB_SWITCHES0, 0x07)) {
-    return false;
-  }
-  osDelay(10);
-  uint8_t cc1 = fusb_read_byte(FUSB_STATUS0) & FUSB_STATUS0_BC_LVL;
+  for (uint16_t attempt = 0; attempt <= 300; attempt++) {
+    // PWDN1|PWDN2|MEAS_CC1/MEAS_CC2
+    const uint8_t switches0 = measuringCC1 ? 0x07 : 0x0B;
+    if (!fusb_write_byte(FUSB_SWITCHES0, switches0)) {
+      return false;
+    }
+    osDelay(1);
 
-  /* Measure CC2 */
-  if (!fusb_write_byte(FUSB_SWITCHES0, 0x0B)) {
-    return false;
-  }
-  osDelay(10);
-  uint8_t cc2 = fusb_read_byte(FUSB_STATUS0) & FUSB_STATUS0_BC_LVL;
-
-  /* Select the correct CC line for BMC signaling; also enable AUTO_CRC */
-  if (cc1 > cc2) {
-    // TX_CC1|AUTO_CRC|SPECREV0
-    if (!fusb_write_byte(FUSB_SWITCHES1, 0x25)) {
-      return false;
+    if ((fusb_read_byte(FUSB_STATUS0) & 0x0F) > 1) {
+      /* Select the live CC line for BMC signaling; also enable AUTO_CRC */
+      // TX_CC1/TX_CC2|AUTO_CRC|SPECREV0
+      if (!fusb_write_byte(FUSB_SWITCHES1, measuringCC1 ? 0x25 : 0x26)) {
+        return false;
+      }
+      return fusb_write_byte(FUSB_SWITCHES0, switches0);
     }
-    // PWDN1|PWDN2|MEAS_CC1
-    if (!fusb_write_byte(FUSB_SWITCHES0, 0x07)) {
-      return false;
-    }
-  } else {
-    // TX_CC2|AUTO_CRC|SPECREV0
-    if (!fusb_write_byte(FUSB_SWITCHES1, 0x26)) {
-      return false;
-    }
-    // PWDN1|PWDN2|MEAS_CC2
-    if (!fusb_write_byte(FUSB_SWITCHES0, 0x0B)) {
-      return false;
-    }
+    measuringCC1 = !measuringCC1;
   }
   return true;
 }

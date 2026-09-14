@@ -353,7 +353,7 @@ TEST(FUSB, DeviceSetup) {
     state++;
     return true;
   };
-  auto mock_delay = [](uint32_t millis) { CHECK_EQUAL(10, millis); };
+  auto mock_delay = [](uint32_t millis) { CHECK(millis == 10 || millis == 1); };
 
   FUSB302 f = FUSB302(0x23 << 1, mock_read, mock_write, mock_delay);
 
