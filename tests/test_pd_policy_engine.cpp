@@ -7,11 +7,20 @@
 #include <stdint.h>
 #include <stdio.h>
 // Working through testing the PD state machine
-TEST_GROUP(PD){};
-MockFUSB302 fusb_mock = MockFUSB302();
+MockFUSB302 *fusb_mock = nullptr;
+TEST_GROUP(PD) {
+  void setup() {
+    fusb_mock = new MockFUSB302();
+    fusb_mock->reset();
+  }
+  void teardown() {
+    delete fusb_mock;
+    fusb_mock = nullptr;
+  }
+};
 // remap's for usin the Mock
-bool    i2c_read(const uint8_t deviceAddress, const uint8_t address, const uint8_t size, uint8_t *buf) { return fusb_mock.i2cRead(deviceAddress, address, size, buf); }
-bool    i2c_write(const uint8_t deviceAddress, const uint8_t address, const uint8_t size, uint8_t *buf) { return fusb_mock.i2cWrite(deviceAddress, address, size, buf); }
+bool    i2c_read(const uint8_t deviceAddress, const uint8_t address, const uint8_t size, uint8_t *buf) { return fusb_mock->i2cRead(deviceAddress, address, size, buf); }
+bool    i2c_write(const uint8_t deviceAddress, const uint8_t address, const uint8_t size, uint8_t *buf) { return fusb_mock->i2cWrite(deviceAddress, address, size, buf); }
 auto    mock_delay     = [](uint32_t millis) {};
 auto    mock_timestamp = []() -> uint32_t { return 0; };
 FUSB302 fusb           = FUSB302(FUSB302B_ADDR, i2c_read, i2c_write, mock_delay);
@@ -63,8 +72,8 @@ const uint8_t message_ready[]                = {FUSB_FIFO_RX_SOP, 0x66, 0x05, 0,
 
 void injectTestmessage(const uint8_t len, const uint8_t *data) {
 
-  fusb_mock.addToFIFO(len, data);
-  fusb_mock.setRegister(FUSB_INTERRUPTB, FUSB_INTERRUPTB_I_GCRCSENT);
+  fusb_mock->addToFIFO(len, data);
+  fusb_mock->setRegister(FUSB_INTERRUPTB, FUSB_INTERRUPTB_I_GCRCSENT);
   CHECK_TRUE(fusb.fusb_rx_pending());
   pe.IRQOccured();
   CHECK_FALSE(fusb.fusb_rx_pending());
@@ -98,17 +107,17 @@ void test_NormalNegotiation() {
   const uint8_t expectedPD21VPPSMessage[] = {18, 18, 18, 19, 134, 130, 16, 45, 52, 8, 115, 255, 20, 254, 161};
   uint8_t       sendMessage[sizeof(expectedPD21VPPSMessage)];
   CHECK_EQUAL(5 + 6 + 4, sizeof(expectedPD21VPPSMessage));
-  CHECK_TRUE(fusb_mock.readFiFo(sizeof(expectedPD21VPPSMessage), sendMessage));
-  CHECK_TRUE(fusb_mock.fifoEmpty()); // Assert we read it all out
+  CHECK_TRUE(fusb_mock->readFiFo(sizeof(expectedPD21VPPSMessage), sendMessage));
+  CHECK_TRUE(fusb_mock->fifoEmpty()); // Assert we read it all out
   for (size_t i = 0; i < sizeof(expectedPD21VPPSMessage); i++) {
     // std::cout << "Validate Request Message" << i << "->" << (int)sendMessage[i] << "|" << (int)expectedPD21VPPSMessage[i] << std::endl;
     CHECK_EQUAL(sendMessage[i], expectedPD21VPPSMessage[i]);
   }
 
-  fusb_mock.setRegister(FUSB_INTERRUPTA, FUSB_INTERRUPTA_I_TXSENT);
+  fusb_mock->setRegister(FUSB_INTERRUPTA, FUSB_INTERRUPTA_I_TXSENT);
   pe.IRQOccured();
   iterateThoughExpectedStates({1, 0, 0});
-  fusb_mock.setRegister(FUSB_INTERRUPTA, 0);
+  fusb_mock->setRegister(FUSB_INTERRUPTA, 0);
   // Now that tx has "sent" the charger will send a good crc back
   std::cout << "Faking Good CRC" << std::endl;
 
@@ -152,15 +161,15 @@ TEST(PD, PDNegotiationTest) {
   // Read out the transmitted message
   const uint8_t expectedDeviceCaps[] = {18, 18, 18, 19, 142, 4, 50, 10, 144, 1, 28, 200, 64, 6, 0, 40, 200, 144, 193, 255, 20, 254, 161};
   uint8_t       sendMessage[sizeof(expectedDeviceCaps)];
-  CHECK_TRUE(fusb_mock.readFiFo(sizeof(expectedDeviceCaps), sendMessage));
-  CHECK_TRUE(fusb_mock.fifoEmpty());
+  CHECK_TRUE(fusb_mock->readFiFo(sizeof(expectedDeviceCaps), sendMessage));
+  CHECK_TRUE(fusb_mock->fifoEmpty());
   for (size_t i = 0; i < sizeof(expectedDeviceCaps); i++) {
     // std::cout << "Validate Caps Message " << i << "->" << (int)sendMessage[i] << "|" << (int)expectedDeviceCaps[i] << std::endl;
     CHECK_EQUAL(sendMessage[i], expectedDeviceCaps[i]);
   }
 
-  fusb_mock.setRegister(FUSB_INTERRUPTA, FUSB_INTERRUPTA_I_TXSENT);
+  fusb_mock->setRegister(FUSB_INTERRUPTA, FUSB_INTERRUPTA_I_TXSENT);
   pe.IRQOccured();
   iterateThoughExpectedStates({1, 0, 0});
-  fusb_mock.setRegister(FUSB_INTERRUPTA, 0);
+  fusb_mock->setRegister(FUSB_INTERRUPTA, 0);
 }

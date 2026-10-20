@@ -82,7 +82,7 @@ public:
 
   bool runCCLineSelection() const;
 
-  // Measure VBus with the MADC and check if its connected
+  // Check the dedicated VBUS-valid comparator without changing CC measurement.
   bool isVBUSConnected() const;
 
 private:

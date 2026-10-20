@@ -20,5 +20,6 @@ target_include_directories(${APP_LIB_NAME} PUBLIC include src)
 # (3) include tests build instructions   
 option(COMPILE_TESTS "Compile the tests" OFF)
 if(COMPILE_TESTS)
+  enable_testing()
   add_subdirectory(tests)
 endif(COMPILE_TESTS)
