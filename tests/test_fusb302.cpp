@@ -396,3 +396,31 @@ TEST(FUSB, SendMessage) {
   memset(&msg, 0, sizeof(msg));
   f.fusb_send_message(&msg);
 }
+TEST(FUSB, VBUSDetectionDoesNotChangeCCMeasurement) {
+  static uint8_t status;
+  static unsigned reads;
+  static bool readOK;
+  auto mock_read = [](uint8_t deviceAddress, uint8_t address, uint8_t size, uint8_t *buf) -> bool {
+    CHECK_EQUAL(FUSB302B_ADDR, deviceAddress);
+    CHECK_EQUAL(FUSB_STATUS0, address);
+    CHECK_EQUAL(1, size);
+    ++reads;
+    buf[0] = status;
+    return readOK;
+  };
+  auto mock_write = [](uint8_t, uint8_t, uint8_t, uint8_t *) -> bool {
+    FAIL("VBUS detection must not reconfigure the measurement path");
+    return false;
+  };
+  auto mock_delay = [](uint32_t) { FAIL("VBUS detection must not delay PD processing"); };
+  FUSB302 f(FUSB302B_ADDR, mock_read, mock_write, mock_delay);
+  readOK = true;
+  for (unsigned value = 0; value < 256; ++value) {
+    status = value;
+    reads = 0;
+    CHECK_EQUAL(bool(value & FUSB_STATUS0_VBUSOK), f.isVBUSConnected());
+    CHECK_EQUAL(1, reads);
+  }
+  readOK = false;
+  CHECK_FALSE(f.isVBUSConnected());
+}

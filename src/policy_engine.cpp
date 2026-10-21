@@ -64,6 +64,11 @@ void PolicyEngine::printStateName() {
 #endif
 }
 bool PolicyEngine::thread() {
+  if (currentEvents & (uint32_t)Notifications::RESET) {
+    clearEvents(0xFFFFFF);
+    incomingMessages.flush();
+    state = PESinkHandleSoftReset;
+  }
   auto stateEnter = state;
   switch (state) {
 
@@ -209,7 +214,8 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_start_message_tx(PolicyEngine
   if (PD_MSGTYPE_GET(msg) == PD_MSGTYPE_SOFT_RESET && PD_NUMOBJ_GET(msg) == 0) {
     /* Clear MessageIDCounter */
     _tx_messageidcounter = 0;
-    return postTxState; // Message is "done"
+    incomingMessages.flush();
+    clearEvents(0xFFFFFF);
   }
   postSendFailedState = txFailState;
   postSendState       = postTxState;

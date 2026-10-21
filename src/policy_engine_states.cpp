@@ -378,9 +378,10 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_soft_reset() {
    * when a Soft_Reset message is received. */
 
   /* Get a message object */
-  pd_msg accept;
-  /* Make an soft reset message */
-  accept.hdr = hdr_template | PD_MSGTYPE_SOFT_RESET | PD_NUMOBJ(0);
+  _tx_messageidcounter = 0;
+  pd_msg accept = {};
+  /* Respond to Soft_Reset with Accept using MessageID zero. */
+  accept.hdr = hdr_template | PD_MSGTYPE_ACCEPT | PD_NUMOBJ(0);
   /* Transmit the Accept */
   return pe_start_message_tx(PESinkSetupWaitCap, PESinkHardReset, &accept);
 }
@@ -523,7 +524,7 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_event() {
     return PESinkSendSoftReset;
   }
   if (currentEvents & (uint32_t)Notifications::RESET) {
-    return PESinkTransitionDefault;
+    return PESinkHandleSoftReset;
   }
 
   if (currentEvents & waitingEventsMask) {
@@ -535,18 +536,24 @@ PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_event() {
 PolicyEngine::policy_engine_state PolicyEngine::pe_sink_wait_good_crc() {
   clearEvents(0xFFFFFF);
 
-  while (incomingMessages.getOccupied()) {
-    // Wait for the Good CRC
-    pd_msg goodcrc;
-    /* Read the GoodCRC */
-    incomingMessages.pop(&goodcrc);
-    /* Check that the message is correct */
-    if (PD_MSGTYPE_GET(&goodcrc) == PD_MSGTYPE_GOODCRC && PD_NUMOBJ_GET(&goodcrc) == 0 && PD_MESSAGEID_GET(&goodcrc) == _tx_messageidcounter) {
-      /* Increment MessageIDCounter */
-      _tx_messageidcounter = (_tx_messageidcounter + 1) % 8;
-      notify(Notifications::TX_DONE);
-      return postSendState;
+  bool acknowledged = false;
+  const auto pending = incomingMessages.getOccupied();
+  for (size_t i = 0; i < pending; ++i) {
+    pd_msg message;
+    incomingMessages.pop(&message);
+    if (PD_MSGTYPE_GET(&message) == PD_MSGTYPE_GOODCRC && PD_NUMOBJ_GET(&message) == 0) {
+      if (PD_MESSAGEID_GET(&message) == _tx_messageidcounter) {
+        acknowledged = true;
+      }
+    } else {
+      // Keep application messages for the next policy state.
+      incomingMessages.push(&message);
     }
+  }
+  if (acknowledged) {
+    _tx_messageidcounter = (_tx_messageidcounter + 1) % 8;
+    notify(Notifications::TX_DONE);
+    return postSendState;
   }
   notify(Notifications::TX_ERR);
   return postSendFailedState;
